@@ -51,6 +51,11 @@ python -m next_state_predictor.main --help
 python -m next_state_predictor.main --env CartPole-v1 --episodes 20 --seed 42
 ```
 
+```bash
+# DQN training with transition persistence and 4-state trajectories
+python -m next_state_predictor.main --agent dqn --episodes 20 --db transitions.db --trajectory-length 4
+```
+
 ---
 
 ## Running tests

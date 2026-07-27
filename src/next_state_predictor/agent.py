@@ -241,15 +241,19 @@ class DQNAgent(Agent):
     # ------------------------------------------------------------------
 
     def save_transitions_to_sqlite(
-        self, db_path: str, table: str = "transitions"
+        self,
+        db_path: str,
+        table: str = "transitions",
+        trajectory_length: int = 1,
     ) -> None:
         """Persist all replay-buffer transitions to a SQLite database.
 
         Args:
             db_path: Path to the SQLite database file (created if absent).
             table: Table name to write to (created if absent).
+            trajectory_length: Number of recent states to store per transition.
         """
-        self.replay_buffer.save_to_sqlite(db_path, table)
+        self.replay_buffer.save_to_sqlite(db_path, table, trajectory_length)
 
     # ------------------------------------------------------------------
     # Internals
@@ -260,4 +264,3 @@ class DQNAgent(Agent):
         return self.epsilon_end + (self.epsilon_start - self.epsilon_end) * np.exp(
             -self._step / self.epsilon_decay
         )
-

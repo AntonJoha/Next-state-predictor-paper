@@ -63,6 +63,7 @@ def train_dqn(
     render: bool = False,
     db_path: str | None = None,
     db_table: str = "transitions",
+    trajectory_length: int = 1,
 ) -> list[float]:
     """Train a :class:`~next_state_predictor.agent.DQNAgent` and optionally
     persist all collected transitions to SQLite.
@@ -79,6 +80,7 @@ def train_dqn(
         db_path: If given, all replay-buffer transitions are saved to this
             SQLite database file after training completes.
         db_table: Table name used when writing to SQLite.
+        trajectory_length: Number of recent states to store per transition.
 
     Returns:
         A list of total rewards, one entry per episode.
@@ -115,7 +117,7 @@ def train_dqn(
         rewards.append(episode_reward)
 
     if db_path is not None:
-        agent.save_transitions_to_sqlite(db_path, db_table)
+        agent.save_transitions_to_sqlite(db_path, db_table, trajectory_length)
 
     return rewards
 
