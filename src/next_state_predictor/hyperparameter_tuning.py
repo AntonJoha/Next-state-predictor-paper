@@ -56,7 +56,8 @@ def tune_dqn(
     * **Grid search** (``n_trials=None``): every combination of values in
       *param_grid* is evaluated exhaustively.
     * **Random search** (``n_trials=<int>``): *n_trials* combinations are
-      sampled uniformly at random from *param_grid*.
+      sampled from *param_grid* without replacement when *n_trials* does not
+      exceed the total number of combinations, and with replacement otherwise.
 
     Args:
         make_env: A callable that returns a fresh Gymnasium environment.
@@ -102,18 +103,20 @@ def tune_dqn(
         combinations_to_try = all_combinations
     else:
         rng = random.Random(seed)
-        combinations_to_try = [
-            rng.choice(all_combinations) for _ in range(n_trials)
-        ]
+        if n_trials <= len(all_combinations):
+            combinations_to_try = rng.sample(all_combinations, n_trials)
+        else:
+            combinations_to_try = [rng.choice(all_combinations) for _ in range(n_trials)]
 
     trials: list[TrialResult] = []
     best_score = float("-inf")
     best_params: dict[str, Any] = {}
 
-    for params in combinations_to_try:
+    for trial_index, params in enumerate(combinations_to_try):
+        trial_seed = None if seed is None else seed + trial_index
         env = make_env()
         try:
-            agent = DQNAgent(env, seed=seed, **params)
+            agent = DQNAgent(env, seed=trial_seed, **params)
             train_dqn(agent, n_episodes=n_train_episodes)
             stats = evaluate(agent, n_episodes=n_eval_episodes)
         finally:
