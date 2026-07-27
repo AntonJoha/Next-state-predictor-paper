@@ -51,7 +51,7 @@ def collect_transitions(
     env_id: str,
     n_episodes: int,
     seed: int,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, list[int]]:
     """Roll out a random policy and collect (state, next_state) pairs.
 
     Args:
@@ -61,39 +61,50 @@ def collect_transitions(
 
     Returns:
         states, next_states: Arrays of shape ``(N, obs_dim)``.
+        episode_lengths: Number of transitions in each episode.
     """
     env = gym.make(env_id)
     env.action_space.seed(seed)
 
     states: list[np.ndarray] = []
     next_states: list[np.ndarray] = []
+    episode_lengths: list[int] = []
 
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
+        ep_len = 0
         while True:
             action = env.action_space.sample()
             next_obs, _, terminated, truncated, _ = env.step(action)
             states.append(np.array(obs, dtype=np.float32))
             next_states.append(np.array(next_obs, dtype=np.float32))
             obs = next_obs
+            ep_len += 1
             if terminated or truncated:
                 break
+        episode_lengths.append(ep_len)
 
     env.close()
-    return np.stack(states), np.stack(next_states)
+    return np.stack(states), np.stack(next_states), episode_lengths
 
 
 def build_sequences(
     states: np.ndarray,
     next_states: np.ndarray,
     seq_len: int,
+    episode_lengths: list[int] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Slide a window over the flat transition list to build sequence batches.
+    """Slide a window over transitions to build sequence batches.
+
+    When *episode_lengths* is provided, windows are constrained to stay within
+    episode boundaries so that no sequence spans an environment reset.
 
     Args:
         states: ``(N, obs_dim)`` array of current observations.
         next_states: ``(N, obs_dim)`` array of next observations.
         seq_len: Length of each input sequence window.
+        episode_lengths: Number of transitions per episode.  When supplied,
+            sequences that would cross an episode boundary are skipped.
 
     Returns:
         x:   ``(M, seq_len, obs_dim)`` current-step sequences.
@@ -101,15 +112,33 @@ def build_sequences(
         y:   ``(M, 1, obs_dim)`` target next states.
     """
     N, obs_dim = states.shape
-    if N <= seq_len:
-        msg = f"Need more than seq_len={seq_len} transitions; got {N}."
-        raise ValueError(msg)
 
     xs, x1s, ys = [], [], []
-    for i in range(N - seq_len):
-        xs.append(states[i : i + seq_len])
-        x1s.append(next_states[i : i + seq_len])
-        ys.append(next_states[i + seq_len : i + seq_len + 1])
+
+    if episode_lengths is not None:
+        start = 0
+        for ep_len in episode_lengths:
+            end = start + ep_len
+            for i in range(start, end - seq_len):
+                xs.append(states[i : i + seq_len])
+                x1s.append(next_states[i : i + seq_len])
+                ys.append(next_states[i + seq_len : i + seq_len + 1])
+            start = end
+    else:
+        if N <= seq_len:
+            msg = f"Need more than seq_len={seq_len} transitions; got {N}."
+            raise ValueError(msg)
+        for i in range(N - seq_len):
+            xs.append(states[i : i + seq_len])
+            x1s.append(next_states[i : i + seq_len])
+            ys.append(next_states[i + seq_len : i + seq_len + 1])
+
+    if not xs:
+        msg = (
+            f"No valid sequences produced with seq_len={seq_len}. "
+            "Collect more episodes or reduce --seq-len."
+        )
+        raise ValueError(msg)
 
     return np.stack(xs), np.stack(x1s), np.stack(ys)
 
@@ -536,7 +565,7 @@ def main() -> None:
 
     # ── collect transitions ────────────────────────────────────────────────────
     print(f"Collecting transitions ({args.episodes} episodes) …")
-    states, next_states = collect_transitions(args.env, args.episodes, args.seed)
+    states, next_states, episode_lengths = collect_transitions(args.env, args.episodes, args.seed)
     print(f"  {len(states)} transitions collected; obs_dim={states.shape[1]}")
 
     # ── normalise ──────────────────────────────────────────────────────────────
@@ -546,7 +575,7 @@ def main() -> None:
     next_states_n, _, _ = normalise(next_states, lo, hi)
 
     # ── build sequences ────────────────────────────────────────────────────────
-    x_all, x1_all, y_all = build_sequences(states_n, next_states_n, args.seq_len)
+    x_all, x1_all, y_all = build_sequences(states_n, next_states_n, args.seq_len, episode_lengths)
     input_dim = output_dim = x_all.shape[2]
     N = x_all.shape[0]
     split = int(N * (1.0 - args.test_split))
