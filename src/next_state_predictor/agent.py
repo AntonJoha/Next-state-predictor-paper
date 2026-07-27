@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import gymnasium as gym
-import numpy as np
 
 
 class Agent(ABC):
@@ -40,7 +39,8 @@ class RandomAgent(Agent):
 
     def __init__(self, env: gym.Env, seed: int | None = None) -> None:
         super().__init__(env)
-        self._rng = np.random.default_rng(seed)
+        if seed is not None:
+            self.action_space.seed(seed)
 
     def select_action(self, observation: Any) -> Any:  # noqa: ARG002
         return self.action_space.sample()

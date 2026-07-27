@@ -7,13 +7,17 @@ import random
 import numpy as np
 
 
-def set_seed(seed: int) -> None:
-    """Set global random seeds for reproducibility.
+def set_seed(seed: int) -> np.random.Generator:
+    """Set global random seeds for reproducibility and return a NumPy Generator.
 
-    Sets seeds for Python's built-in :mod:`random` module and NumPy.
+    Sets the seed for Python's built-in :mod:`random` module and returns a
+    seeded :class:`numpy.random.Generator` for use in NumPy operations.
 
     Args:
         seed: The integer seed value to use.
+
+    Returns:
+        A seeded :class:`numpy.random.Generator` instance.
     """
     random.seed(seed)
-    np.random.seed(seed)  # noqa: NPY002
+    return np.random.default_rng(seed)

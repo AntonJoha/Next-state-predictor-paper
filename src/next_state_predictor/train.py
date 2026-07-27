@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 if TYPE_CHECKING:
     from next_state_predictor.agent import Agent
 
@@ -69,8 +71,6 @@ def evaluate(
     Returns:
         A dictionary with keys ``mean``, ``std``, ``min``, and ``max``.
     """
-    import numpy as np
-
     rewards = train(agent, n_episodes=n_episodes, render=render)
     return {
         "mean": float(np.mean(rewards)),
