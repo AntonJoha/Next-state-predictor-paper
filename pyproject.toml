@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
     "gymnasium>=1.0.0",
     "numpy>=1.24.0",
+    "torch>=2.6.0",
 ]
 
 [project.optional-dependencies]

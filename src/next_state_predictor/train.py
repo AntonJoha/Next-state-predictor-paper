@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from next_state_predictor.agent import Agent
+    from next_state_predictor.agent import Agent, DQNAgent
 
 
 def train(
@@ -52,6 +52,70 @@ def train(
                 break
 
         rewards.append(episode_reward)
+
+    return rewards
+
+
+def train_dqn(
+    agent: DQNAgent,
+    n_episodes: int = 500,
+    max_steps: int | None = None,
+    render: bool = False,
+    db_path: str | None = None,
+    db_table: str = "transitions",
+) -> list[float]:
+    """Train a :class:`~next_state_predictor.agent.DQNAgent` and optionally
+    persist all collected transitions to SQLite.
+
+    Each step calls :meth:`~next_state_predictor.agent.DQNAgent.observe` so the
+    agent can store the transition in its replay buffer and perform a
+    gradient-descent update.
+
+    Args:
+        agent: The DQN agent to train.
+        n_episodes: Number of training episodes.
+        max_steps: Optional cap on steps per episode.
+        render: Whether to call ``env.render()`` each step.
+        db_path: If given, all replay-buffer transitions are saved to this
+            SQLite database file after training completes.
+        db_table: Table name used when writing to SQLite.
+
+    Returns:
+        A list of total rewards, one entry per episode.
+    """
+    rewards: list[float] = []
+
+    for _ in range(n_episodes):
+        observation, _info = agent.env.reset()
+        agent.reset()
+
+        episode_reward = 0.0
+        step = 0
+
+        while True:
+            if render:
+                agent.env.render()
+
+            action = agent.select_action(observation)
+            next_observation, reward, terminated, truncated, _info = agent.env.step(
+                action
+            )
+            done = terminated or truncated
+            agent.observe(observation, action, reward, next_observation, done)
+
+            episode_reward += float(reward)
+            observation = next_observation
+            step += 1
+
+            if done:
+                break
+            if max_steps is not None and step >= max_steps:
+                break
+
+        rewards.append(episode_reward)
+
+    if db_path is not None:
+        agent.save_transitions_to_sqlite(db_path, db_table)
 
     return rewards
 
