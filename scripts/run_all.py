@@ -33,7 +33,7 @@ _DEFAULTS: dict[str, str] = {
     "--seq-len": "4",
     "--epochs": "50",
     "--batch-size": "64",
-    "--lr": "1e-3",
+    "--lr": "0.001",
     "--hidden-size": "64",
     "--latent-dim": "16",
     "--test-split": "0.2",

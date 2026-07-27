@@ -109,7 +109,7 @@ def build_sequences(
     for i in range(N - seq_len):
         xs.append(states[i : i + seq_len])
         x1s.append(next_states[i : i + seq_len])
-        ys.append(next_states[i + seq_len - 1 : i + seq_len])
+        ys.append(next_states[i + seq_len : i + seq_len + 1])
 
     return np.stack(xs), np.stack(x1s), np.stack(ys)
 
@@ -385,8 +385,9 @@ def plot_individual(
 
     # 4. Per-sample MSE histogram
     fig, ax = plt.subplots(figsize=(7, 4))
+    mean_mse = mse_per_sample.mean()
     ax.hist(mse_per_sample, bins=40, color=colour, edgecolor="white", alpha=0.85)
-    ax.axvline(mse_per_sample.mean(), color="black", linestyle="--", label=f"mean={mse_per_sample.mean():.4f}")
+    ax.axvline(mean_mse, color="black", linestyle="--", label=f"mean={mean_mse:.4f}")
     ax.set_xlabel("Per-sample MSE")
     ax.set_ylabel("Count")
     ax.set_title(f"{model_name} — prediction error distribution")
