@@ -99,7 +99,7 @@ class ReplayBuffer:
             trajectory_length: Number of recent states to store per transition.
         """
         if trajectory_length < 1:
-            msg = "trajectory_length must be >= 1."
+            msg = "trajectory_length must be >= 1"
             raise ValueError(msg)
         _validate_table_name(table)
         conn = sqlite3.connect(db_path)
