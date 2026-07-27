@@ -11,6 +11,8 @@ from typing import NamedTuple
 
 import numpy as np
 
+COLUMN_NAME_INDEX = 1
+
 
 def _validate_table_name(table: str) -> str:
     """Raise ValueError if *table* is not a safe SQL identifier."""
@@ -102,43 +104,44 @@ class ReplayBuffer:
             msg = "trajectory_length must be >= 1"
             raise ValueError(msg)
         _validate_table_name(table)
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            f"""CREATE TABLE IF NOT EXISTS {table} (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                state       TEXT    NOT NULL,
-                state_trajectory TEXT NOT NULL,
-                action      INTEGER NOT NULL,
-                reward      REAL    NOT NULL,
-                next_state  TEXT    NOT NULL,
-                done        INTEGER NOT NULL
-            )"""
-        )
-        columns = {
-            row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
-        }
-        if "state_trajectory" not in columns:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN state_trajectory TEXT")
-
         transitions = list(self._buffer)
-        conn.executemany(
-            f"INSERT INTO {table} "
-            "(state, state_trajectory, action, reward, next_state, done)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    json.dumps(t.state.tolist()),
-                    json.dumps(_build_state_trajectory(transitions, idx, trajectory_length)),
-                    t.action,
-                    t.reward,
-                    json.dumps(t.next_state.tolist()),
-                    int(t.done),
-                )
-                for idx, t in enumerate(transitions)
-            ],
-        )
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                f"""CREATE TABLE IF NOT EXISTS {table} (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    state       TEXT    NOT NULL,
+                    state_trajectory TEXT NOT NULL,
+                    action      INTEGER NOT NULL,
+                    reward      REAL    NOT NULL,
+                    next_state  TEXT    NOT NULL,
+                    done        INTEGER NOT NULL
+                )"""
+            )
+            columns = {
+                row[COLUMN_NAME_INDEX]
+                for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            if "state_trajectory" not in columns:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN state_trajectory TEXT")
+
+            conn.executemany(
+                f"INSERT INTO {table} "
+                "(state, state_trajectory, action, reward, next_state, done)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        json.dumps(t.state.tolist()),
+                        json.dumps(
+                            _build_state_trajectory(transitions, idx, trajectory_length)
+                        ),
+                        t.action,
+                        t.reward,
+                        json.dumps(t.next_state.tolist()),
+                        int(t.done),
+                    )
+                    for idx, t in enumerate(transitions)
+                ],
+            )
 
     def load_from_sqlite(self, db_path: str, table: str = "transitions") -> None:
         """Load transitions from a SQLite database into the buffer.
@@ -151,11 +154,10 @@ class ReplayBuffer:
             table: Table name to read from.
         """
         _validate_table_name(table)
-        conn = sqlite3.connect(db_path)
-        rows = conn.execute(
-            f"SELECT state, action, reward, next_state, done FROM {table}"
-        ).fetchall()
-        conn.close()
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute(
+                f"SELECT state, action, reward, next_state, done FROM {table}"
+            ).fetchall()
         for row in rows:
             self._buffer.append(
                 Transition(
