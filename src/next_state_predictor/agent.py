@@ -157,7 +157,7 @@ class DQNAgent(Agent):
         return int(q_values.argmax(dim=1).item())
 
     def reset(self) -> None:
-        pass
+        """Reset per-episode state (no-op for DQN)."""
 
     def observe(
         self,
