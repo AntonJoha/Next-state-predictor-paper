@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import random
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -106,6 +107,12 @@ def tune_dqn(
         if n_trials <= len(all_combinations):
             combinations_to_try = rng.sample(all_combinations, n_trials)
         else:
+            warnings.warn(
+                f"n_trials ({n_trials}) exceeds the total number of unique parameter "
+                f"combinations ({len(all_combinations)}). Sampling with replacement "
+                "will produce duplicate configurations.",
+                stacklevel=2,
+            )
             combinations_to_try = [rng.choice(all_combinations) for _ in range(n_trials)]
 
     trials: list[TrialResult] = []
@@ -113,7 +120,12 @@ def tune_dqn(
     best_params: dict[str, Any] = {}
 
     for trial_index, params in enumerate(combinations_to_try):
-        trial_seed = None if seed is None else seed + trial_index
+        # Derive a per-trial seed that is independent across different tuning
+        # runs: hashing (seed, index) avoids the collision that arises when
+        # trial k of run with seed s+1 happens to equal trial k+1 of seed s.
+        trial_seed = (
+            None if seed is None else abs(hash((seed, trial_index))) % (2**31)
+        )
         env = make_env()
         try:
             agent = DQNAgent(env, seed=trial_seed, **params)
