@@ -11,7 +11,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-COLUMN_NAME_INDEX = 1
+PRAGMA_COLUMN_NAME_INDEX = 1
 
 
 def _validate_table_name(table: str) -> str:
@@ -118,11 +118,14 @@ class ReplayBuffer:
                 )"""
             )
             columns = {
-                row[COLUMN_NAME_INDEX]
+                row[PRAGMA_COLUMN_NAME_INDEX]
                 for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
             }
             if "state_trajectory" not in columns:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN state_trajectory TEXT")
+                conn.execute(
+                    f"ALTER TABLE {table} "
+                    "ADD COLUMN state_trajectory TEXT DEFAULT '[]'"
+                )
 
             conn.executemany(
                 f"INSERT INTO {table} "
