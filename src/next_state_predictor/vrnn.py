@@ -50,7 +50,6 @@ class VRNN(nn.Module):
         self.output_dim = output_dim
         self.device = device
 
-        # Feature extractors
         self.phi_x = nn.Sequential(
             nn.Linear(input_dim, hidden_size, device=device),
             nn.ReLU(),
@@ -84,7 +83,6 @@ class VRNN(nn.Module):
         self.dec_mean = nn.Linear(hidden_size, output_dim, device=device)
         self.dec_log_var = nn.Linear(hidden_size, output_dim, device=device)
 
-        # GRU updates h after each step using (phi_x(x_t), phi_z(z_t))
         self.rnn = nn.GRU(
             input_size=hidden_size * 2,
             hidden_size=hidden_size,
@@ -92,8 +90,6 @@ class VRNN(nn.Module):
             batch_first=True,
             device=device,
         )
-
-    # ── Public API ────────────────────────────────────────────────────────────
 
     def get_parameters(self) -> Iterator[nn.Parameter]:
         """Return an iterator over all trainable parameters."""
@@ -170,8 +166,6 @@ class VRNN(nn.Module):
         _, y_mean, _ = self._decode_next_state(h)
         return y_mean
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
-
     def _reparameterize(
         self, mean: torch.Tensor, log_var: torch.Tensor
     ) -> torch.Tensor:
@@ -229,14 +223,14 @@ class VRNN(nn.Module):
         total_kl = torch.tensor(0.0, device=self.device)
 
         for t in range(seq_len):
-            h_t = h.squeeze(0)  # (batch, hidden_size)
+            h_t = h.squeeze(0)
 
             # Prior distribution p(z_t | h_{t-1})
             p_h = self.prior_net(h_t)
             p_mean = self.prior_mean(p_h)
             p_log_var = self.prior_log_var(p_h)
 
-            phi_xt = self.phi_x(x[:, t, :])  # (batch, hidden_size)
+            phi_xt = self.phi_x(x[:, t, :])
 
             # Posterior q(z_t | x_1_t, h_{t-1}) when x_1 is provided
             if x_1 is not None and t < x_1.size(1):

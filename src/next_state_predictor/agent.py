@@ -52,11 +52,6 @@ class RandomAgent(Agent):
         return self.action_space.sample()
 
 
-# ---------------------------------------------------------------------------
-# DQN (Deep Q-Network) — PyTorch implementation
-# ---------------------------------------------------------------------------
-
-
 class _QNetwork(nn.Module):
     """Two-layer MLP for Q-value estimation.
 
@@ -149,10 +144,6 @@ class DQNAgent(Agent):
 
         self.replay_buffer: ReplayBuffer = ReplayBuffer(capacity=replay_capacity)
 
-    # ------------------------------------------------------------------
-    # Agent interface
-    # ------------------------------------------------------------------
-
     def select_action(self, observation: Any) -> Any:
         """Epsilon-greedy action selection."""
         if self._rng.random() < self._epsilon():
@@ -166,11 +157,7 @@ class DQNAgent(Agent):
         return int(q_values.argmax(dim=1).item())
 
     def reset(self) -> None:
-        """No per-episode state to reset for DQN."""
-
-    # ------------------------------------------------------------------
-    # Learning
-    # ------------------------------------------------------------------
+        """Reset per-episode state (no-op for DQN)."""
 
     def observe(
         self,
@@ -236,10 +223,6 @@ class DQNAgent(Agent):
 
         return float(loss.item())
 
-    # ------------------------------------------------------------------
-    # Persistence
-    # ------------------------------------------------------------------
-
     def save_transitions_to_sqlite(
         self,
         db_path: str,
@@ -254,10 +237,6 @@ class DQNAgent(Agent):
             trajectory_length: Number of recent states to store per transition.
         """
         self.replay_buffer.save_to_sqlite(db_path, table, trajectory_length)
-
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
 
     def _epsilon(self) -> float:
         """Current exploration probability (exponential decay)."""

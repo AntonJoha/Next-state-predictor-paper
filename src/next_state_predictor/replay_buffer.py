@@ -70,10 +70,6 @@ class ReplayBuffer:
     def __len__(self) -> int:
         return len(self._buffer)
 
-    # ------------------------------------------------------------------
-    # SQLite persistence
-    # ------------------------------------------------------------------
-
     def save_to_sqlite(
         self,
         db_path: str,
