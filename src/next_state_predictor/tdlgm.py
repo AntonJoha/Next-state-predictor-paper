@@ -494,7 +494,13 @@ class tDLGMCrossEntropy(tDLGM):
         t_1: list,
         reg: float,
     ) -> torch.Tensor:
-        target = y.argmax(dim=-1)
+        # Accept either class indices (any shape) or one-hot/logit vectors
+        # (last dim == output_dim). Flatten to 1-D integer targets for
+        # CrossEntropyLoss which expects shape (N,).
+        if y.dtype in (torch.long, torch.int, torch.int32, torch.int64):
+            target = y.reshape(-1)
+        else:
+            target = y.argmax(dim=-1).reshape(-1)
         loss = self.cross_entropy(y_hat, target)
         matrix_size = mean[0].size(0) * mean[0].size(1)
 
