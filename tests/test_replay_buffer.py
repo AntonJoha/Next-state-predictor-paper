@@ -21,11 +21,10 @@ def test_save_to_sqlite_stores_state_trajectories(tmp_path):
     db_path = tmp_path / "transitions.db"
     buffer.save_to_sqlite(str(db_path), trajectory_length=2)
 
-    conn = sqlite3.connect(db_path)
-    rows = conn.execute(
-        "SELECT state, state_trajectory FROM transitions ORDER BY id ASC"
-    ).fetchall()
-    conn.close()
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT state, state_trajectory FROM transitions ORDER BY id ASC"
+        ).fetchall()
 
     states = [json.loads(row[0]) for row in rows]
     trajectories = [json.loads(row[1]) for row in rows]
@@ -78,11 +77,10 @@ def test_save_to_sqlite_resets_trajectory_after_terminal_transition(tmp_path):
     db_path = tmp_path / "transitions.db"
     buffer.save_to_sqlite(str(db_path), trajectory_length=2)
 
-    conn = sqlite3.connect(db_path)
-    rows = conn.execute(
-        "SELECT state_trajectory FROM transitions ORDER BY id ASC"
-    ).fetchall()
-    conn.close()
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT state_trajectory FROM transitions ORDER BY id ASC"
+        ).fetchall()
 
     trajectories = [json.loads(row[0]) for row in rows]
     assert trajectories == [
