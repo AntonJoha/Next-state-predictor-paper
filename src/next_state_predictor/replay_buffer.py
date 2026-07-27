@@ -111,6 +111,8 @@ class ReplayBuffer:
             }
             conn.row_factory = original_row_factory
             if "state_trajectory" not in columns:
+                # Existing rows in migrated tables keep this default until
+                # they are rewritten by a future save.
                 conn.execute(
                     f"ALTER TABLE {table} "
                     "ADD COLUMN state_trajectory TEXT DEFAULT '[]'"
@@ -121,7 +123,8 @@ class ReplayBuffer:
             for transition in self._buffer:
                 state_window.append(transition.state)
                 # For early transitions, pad with the first available state so
-                # every stored trajectory has a fixed length.
+                # every stored trajectory has a fixed length. At the start of
+                # an episode that first state is the current transition state.
                 padded_window = [transition.state] * (
                     trajectory_length - len(state_window)
                 ) + list(state_window)

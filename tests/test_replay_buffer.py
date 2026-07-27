@@ -23,16 +23,18 @@ def test_save_to_sqlite_stores_state_trajectories(tmp_path):
 
     conn = sqlite3.connect(db_path)
     rows = conn.execute(
-        "SELECT state_trajectory FROM transitions ORDER BY id ASC"
+        "SELECT state, state_trajectory FROM transitions ORDER BY id ASC"
     ).fetchall()
     conn.close()
 
-    trajectories = [json.loads(row[0]) for row in rows]
+    states = [json.loads(row[0]) for row in rows]
+    trajectories = [json.loads(row[1]) for row in rows]
     assert trajectories == [
         [[0.0], [0.0]],
         [[0.0], [1.0]],
         [[1.0], [2.0]],
     ]
+    assert states == [[0.0], [1.0], [2.0]]
 
 
 def test_save_to_sqlite_rejects_invalid_trajectory_length(tmp_path):
