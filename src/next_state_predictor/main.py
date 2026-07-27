@@ -11,6 +11,14 @@ from next_state_predictor.train import evaluate, train, train_dqn
 from next_state_predictor.utils import set_seed
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        msg = "must be >= 1"
+        raise argparse.ArgumentTypeError(msg)
+    return parsed
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Next-state predictor template")
     parser.add_argument(
@@ -48,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--trajectory-length",
-        type=int,
+        type=_positive_int,
         default=1,
         help="Number of recent states to store per saved transition (default: 1)",
     )

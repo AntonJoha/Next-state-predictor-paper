@@ -138,6 +138,8 @@ class ReplayBuffer:
                         int(transition.done),
                     )
                 )
+                if transition.done:
+                    state_window.clear()
 
             conn.executemany(
                 f"INSERT INTO {table} "
