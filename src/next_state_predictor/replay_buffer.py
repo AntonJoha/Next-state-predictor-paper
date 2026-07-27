@@ -11,8 +11,6 @@ from typing import NamedTuple
 
 import numpy as np
 
-PRAGMA_COLUMN_NAME_INDEX = 1
-
 
 def _validate_table_name(table: str) -> str:
     """Raise ValueError if *table* is not a safe SQL identifier."""
@@ -24,17 +22,6 @@ def _validate_table_name(table: str) -> str:
         )
         raise ValueError(msg)
     return table
-
-
-def _build_state_trajectory(
-    transitions: list["Transition"], idx: int, trajectory_length: int
-) -> list[list[float]]:
-    """Build a fixed-length state trajectory ending at transition ``idx``."""
-    start = max(0, idx - trajectory_length + 1)
-    window = [t.state for t in transitions[start : idx + 1]]
-    if len(window) < trajectory_length:
-        window = [window[0]] * (trajectory_length - len(window)) + window
-    return [state.tolist() for state in window]
 
 
 class Transition(NamedTuple):
@@ -104,7 +91,6 @@ class ReplayBuffer:
             msg = "trajectory_length must be >= 1"
             raise ValueError(msg)
         _validate_table_name(table)
-        transitions = list(self._buffer)
         with sqlite3.connect(db_path) as conn:
             conn.execute(
                 f"""CREATE TABLE IF NOT EXISTS {table} (
@@ -117,8 +103,9 @@ class ReplayBuffer:
                     done        INTEGER NOT NULL
                 )"""
             )
+            conn.row_factory = sqlite3.Row
             columns = {
-                row[PRAGMA_COLUMN_NAME_INDEX]
+                row["name"]
                 for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
             }
             if "state_trajectory" not in columns:
@@ -127,23 +114,29 @@ class ReplayBuffer:
                     "ADD COLUMN state_trajectory TEXT DEFAULT '[]'"
                 )
 
+            state_window: deque[np.ndarray] = deque(maxlen=trajectory_length)
+            insert_rows = []
+            for transition in self._buffer:
+                state_window.append(transition.state)
+                padded_window = [state_window[0]] * (
+                    trajectory_length - len(state_window)
+                ) + list(state_window)
+                insert_rows.append(
+                    (
+                        json.dumps(transition.state.tolist()),
+                        json.dumps([state.tolist() for state in padded_window]),
+                        transition.action,
+                        transition.reward,
+                        json.dumps(transition.next_state.tolist()),
+                        int(transition.done),
+                    )
+                )
+
             conn.executemany(
                 f"INSERT INTO {table} "
                 "(state, state_trajectory, action, reward, next_state, done)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
-                [
-                    (
-                        json.dumps(t.state.tolist()),
-                        json.dumps(
-                            _build_state_trajectory(transitions, idx, trajectory_length)
-                        ),
-                        t.action,
-                        t.reward,
-                        json.dumps(t.next_state.tolist()),
-                        int(t.done),
-                    )
-                    for idx, t in enumerate(transitions)
-                ],
+                insert_rows,
             )
 
     def load_from_sqlite(self, db_path: str, table: str = "transitions") -> None:
