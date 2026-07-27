@@ -7,6 +7,9 @@ from typing import Any
 
 import gymnasium as gym
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
 
 from next_state_predictor.replay_buffer import ReplayBuffer
 
@@ -50,100 +53,41 @@ class RandomAgent(Agent):
 
 
 # ---------------------------------------------------------------------------
-# DQN (Deep Q-Network) — numpy-only implementation
+# DQN (Deep Q-Network) — PyTorch implementation
 # ---------------------------------------------------------------------------
 
 
-class _NumpyQNetwork:
-    """Two-layer MLP for Q-value estimation implemented with plain NumPy.
+class _QNetwork(nn.Module):
+    """Two-layer MLP for Q-value estimation.
 
     Args:
         input_dim: Number of input features (flattened observation size).
         hidden_dim: Number of units in the hidden layer.
         output_dim: Number of discrete actions.
-        lr: Learning rate for gradient descent.
     """
 
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        output_dim: int,
-        lr: float = 1e-3,
-    ) -> None:
-        self.lr = lr
-        # He / Xavier initialisation
-        self.W1 = np.random.randn(input_dim, hidden_dim) * np.sqrt(2.0 / input_dim)
-        self.b1 = np.zeros(hidden_dim)
-        self.W2 = np.random.randn(hidden_dim, output_dim) * np.sqrt(2.0 / hidden_dim)
-        self.b2 = np.zeros(output_dim)
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim),
+        )
 
-    def predict(self, x: np.ndarray) -> np.ndarray:
-        """Forward pass; *x* may be a single row or a batch (shape ``[B, D]``)."""
-        h = np.maximum(0.0, x @ self.W1 + self.b1)  # ReLU
-        return h @ self.W2 + self.b2
-
-    def update(
-        self, x: np.ndarray, targets: np.ndarray, actions: np.ndarray
-    ) -> float:
-        """One gradient-descent step on the TD-error for the chosen actions.
-
-        Args:
-            x: Batch of states, shape ``[B, D]``.
-            targets: 1-D array of target Q-values, shape ``[B]``.
-            actions: 1-D integer array of chosen actions, shape ``[B]``.
-
-        Returns:
-            Mean-squared Bellman error (scalar).
-        """
-        batch_size = x.shape[0]
-
-        # Forward
-        z1 = x @ self.W1 + self.b1
-        h1 = np.maximum(0.0, z1)
-        q = h1 @ self.W2 + self.b2
-
-        q_pred = q[np.arange(batch_size), actions]
-        loss = float(np.mean((q_pred - targets) ** 2))
-
-        # Backward
-        dq = np.zeros_like(q)
-        dq[np.arange(batch_size), actions] = 2.0 * (q_pred - targets) / batch_size
-
-        dW2 = h1.T @ dq
-        db2 = dq.sum(axis=0)
-
-        dh1 = dq @ self.W2.T
-        dz1 = dh1 * (z1 > 0.0)  # ReLU gradient
-
-        dW1 = x.T @ dz1
-        db1 = dz1.sum(axis=0)
-
-        self.W1 -= self.lr * dW1
-        self.b1 -= self.lr * db1
-        self.W2 -= self.lr * dW2
-        self.b2 -= self.lr * db2
-
-        return loss
-
-    def copy_weights_from(self, other: _NumpyQNetwork) -> None:
-        """Copy weights from *other* into this network (target-network sync)."""
-        self.W1 = other.W1.copy()
-        self.b1 = other.b1.copy()
-        self.W2 = other.W2.copy()
-        self.b2 = other.b2.copy()
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        return self.net(x)
 
 
 class DQNAgent(Agent):
     """Deep Q-Network agent for discrete-action Gymnasium environments.
 
-    Uses a two-layer MLP implemented in pure NumPy, an experience replay
-    buffer, and a target network updated periodically.
+    Uses a two-layer MLP built with PyTorch, an experience replay buffer,
+    and a target network updated periodically.
 
     Args:
         env: A Gymnasium environment with a discrete action space.
         hidden_dim: Hidden layer width of the Q-network.
-        lr: Learning rate.
+        lr: Learning rate for the Adam optimiser.
         gamma: Discount factor.
         epsilon_start: Initial exploration probability.
         epsilon_end: Minimum exploration probability.
@@ -151,6 +95,8 @@ class DQNAgent(Agent):
         batch_size: Mini-batch size for each optimisation step.
         replay_capacity: Maximum capacity of the replay buffer.
         target_update_freq: Steps between target-network weight copies.
+        device: PyTorch device string (e.g. ``"cpu"``, ``"cuda"``).
+            Defaults to ``"cuda"`` if available, else ``"cpu"``.
         seed: Optional integer seed for reproducibility.
     """
 
@@ -166,6 +112,7 @@ class DQNAgent(Agent):
         batch_size: int = 64,
         replay_capacity: int = 10_000,
         target_update_freq: int = 100,
+        device: str | None = None,
         seed: int | None = None,
     ) -> None:
         super().__init__(env)
@@ -183,12 +130,22 @@ class DQNAgent(Agent):
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
 
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device(device)
+
+        if seed is not None:
+            torch.manual_seed(seed)
         self._rng = np.random.default_rng(seed)
         self._step = 0
 
-        self.q_network = _NumpyQNetwork(obs_dim, hidden_dim, n_actions, lr)
-        self.target_network = _NumpyQNetwork(obs_dim, hidden_dim, n_actions, lr)
-        self.target_network.copy_weights_from(self.q_network)
+        self.q_network = _QNetwork(obs_dim, hidden_dim, n_actions).to(self.device)
+        self.target_network = _QNetwork(obs_dim, hidden_dim, n_actions).to(self.device)
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.target_network.eval()
+
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr)
+        self.loss_fn = nn.MSELoss()
 
         self.replay_buffer: ReplayBuffer = ReplayBuffer(capacity=replay_capacity)
 
@@ -200,9 +157,13 @@ class DQNAgent(Agent):
         """Epsilon-greedy action selection."""
         if self._rng.random() < self._epsilon():
             return self.action_space.sample()
-        obs = np.array(observation, dtype=np.float32).flatten()[np.newaxis, :]
-        q_values = self.q_network.predict(obs)[0]
-        return int(np.argmax(q_values))
+        obs = torch.tensor(
+            np.array(observation, dtype=np.float32).flatten(),
+            device=self.device,
+        ).unsqueeze(0)
+        with torch.no_grad():
+            q_values = self.q_network(obs)
+        return int(q_values.argmax(dim=1).item())
 
     def reset(self) -> None:
         """No per-episode state to reset for DQN."""
@@ -239,21 +200,41 @@ class DQNAgent(Agent):
             return None
 
         transitions = self.replay_buffer.sample(self.batch_size)
-        states = np.array([t.state for t in transitions], dtype=np.float32)
-        actions = np.array([t.action for t in transitions], dtype=np.int32)
-        rewards = np.array([t.reward for t in transitions], dtype=np.float32)
-        next_states = np.array([t.next_state for t in transitions], dtype=np.float32)
-        dones = np.array([t.done for t in transitions], dtype=np.float32)
+        states = torch.tensor(
+            np.array([t.state for t in transitions]), device=self.device
+        )
+        actions = torch.tensor(
+            np.array([t.action for t in transitions], dtype=np.int64),
+            device=self.device,
+        )
+        rewards = torch.tensor(
+            np.array([t.reward for t in transitions], dtype=np.float32),
+            device=self.device,
+        )
+        next_states = torch.tensor(
+            np.array([t.next_state for t in transitions]), device=self.device
+        )
+        dones = torch.tensor(
+            np.array([t.done for t in transitions], dtype=np.float32),
+            device=self.device,
+        )
 
-        q_next = self.target_network.predict(next_states)
-        targets = rewards + self.gamma * np.max(q_next, axis=1) * (1.0 - dones)
+        q_pred = self.q_network(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
-        loss = self.q_network.update(states, targets, actions)
+        with torch.no_grad():
+            q_next = self.target_network(next_states).max(dim=1).values
+            targets = rewards + self.gamma * q_next * (1.0 - dones)
+
+        loss = self.loss_fn(q_pred, targets)
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
 
         if self._step % self.target_update_freq == 0:
-            self.target_network.copy_weights_from(self.q_network)
+            self.target_network.load_state_dict(self.q_network.state_dict())
 
-        return loss
+        return float(loss.item())
 
     # ------------------------------------------------------------------
     # Persistence
