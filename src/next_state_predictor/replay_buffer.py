@@ -92,7 +92,6 @@ class ReplayBuffer:
             raise ValueError(msg)
         _validate_table_name(table)
         with sqlite3.connect(db_path) as conn:
-            conn.row_factory = sqlite3.Row
             conn.execute(
                 f"""CREATE TABLE IF NOT EXISTS {table} (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,10 +103,13 @@ class ReplayBuffer:
                     done        INTEGER NOT NULL
                 )"""
             )
+            original_row_factory = conn.row_factory
+            conn.row_factory = sqlite3.Row
             columns = {
                 row["name"]
                 for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
             }
+            conn.row_factory = original_row_factory
             if "state_trajectory" not in columns:
                 conn.execute(
                     f"ALTER TABLE {table} "
@@ -120,7 +122,7 @@ class ReplayBuffer:
                 state_window.append(transition.state)
                 # For early transitions, pad with the first available state so
                 # every stored trajectory has a fixed length.
-                padded_window = [state_window[0]] * (
+                padded_window = [transition.state] * (
                     trajectory_length - len(state_window)
                 ) + list(state_window)
                 insert_rows.append(
