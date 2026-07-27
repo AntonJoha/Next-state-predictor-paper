@@ -9,9 +9,6 @@ import torch
 import torch.nn as nn
 
 
-# ── Time Recognition ──────────────────────────────────────────────────────────
-
-
 class TimeLayer(nn.Module):
     """Single LSTM layer that maps a time-series input to a hidden state.
 
@@ -74,9 +71,6 @@ class TimeRecognition(nn.Module):
         return [layer(x) for layer in self.time_layers]
 
 
-# ── Generator ─────────────────────────────────────────────────────────────────
-
-
 class GenLayer(nn.Module):
     """One hierarchical layer of the tDLGM generator.
 
@@ -110,7 +104,6 @@ class GenLayer(nn.Module):
             device=self.device,
         )
 
-        # Transform latent noise into hidden space.
         self.g = nn.Sequential(
             nn.Linear(self.latent_dim, self.latent_dim, device=self.device),
             nn.Linear(self.latent_dim, self.hidden_size, device=self.device),
@@ -209,9 +202,6 @@ class Generator(nn.Module):
         ]
 
 
-# ── Recognition ───────────────────────────────────────────────────────────────
-
-
 class RecLayer(nn.Module):
     """Amortised recognition (encoder) layer that parameterises a Gaussian.
 
@@ -307,9 +297,6 @@ class Recognition(nn.Module):
         return means, Rs, zs
 
 
-# ── tDLGM ─────────────────────────────────────────────────────────────────────
-
-
 class tDLGM(nn.Module):
     """Temporal Deep Latent Gaussian Model.
 
@@ -353,6 +340,33 @@ class tDLGM(nn.Module):
             self.model_r.parameters(),
         )
 
+    def _kl_reg_loss(
+        self,
+        mean: list,
+        R: list,
+        s: list,
+        t_1: list,
+        reg: float,
+    ) -> torch.Tensor:
+        matrix_size = mean[0].size(0) * mean[0].size(1)
+        kl = torch.tensor(0.0, device=mean[0].device)
+        for m, r in zip(mean, R, strict=False):
+            C = r @ r.transpose(-2, -1)
+            kl = kl + (
+                0.5
+                * torch.sum(
+                    m.pow(2).sum(-1)
+                    + C.diagonal(dim1=-2, dim2=-1).sum(-1)
+                    - C.det().log()
+                    - 1
+                )
+                / matrix_size
+            )
+        amount = len(s) * len(s[0])
+        for a, b in zip(s, t_1, strict=False):
+            kl = kl + reg * (self.mse(a[0], b[0]) + self.mse(a[1], b[1])) / amount
+        return kl
+
     def _loss(
         self,
         y: torch.Tensor,
@@ -364,28 +378,7 @@ class tDLGM(nn.Module):
         reg: float,
     ) -> torch.Tensor:
         target = y.reshape_as(y_hat)
-        loss = self.mse(y_hat, target)
-        matrix_size = mean[0].size(0) * mean[0].size(1)
-
-        for m, r in zip(mean, R, strict=False):
-            C = r @ r.transpose(-2, -1)
-            det = C.det()
-            loss += (
-                0.5
-                * torch.sum(
-                    m.pow(2).sum(-1)
-                    + C.diagonal(dim1=-2, dim2=-1).sum(-1)
-                    - det.log()
-                    - 1
-                )
-                / matrix_size
-            )
-
-        amount = len(s) * len(s[0])
-        for a, b in zip(s, t_1, strict=False):
-            loss += reg * (self.mse(a[0], b[0]) + self.mse(a[1], b[1])) / amount
-
-        return loss
+        return self.mse(y_hat, target) + self._kl_reg_loss(mean, R, s, t_1, reg)
 
     def get_loss(self, x: torch.Tensor, x_1: torch.Tensor, y: torch.Tensor) -> float:
         """Compute the loss without updating parameters.
@@ -494,32 +487,9 @@ class tDLGMCrossEntropy(tDLGM):
         t_1: list,
         reg: float,
     ) -> torch.Tensor:
-        # Accept either class indices (any shape) or one-hot/logit vectors
-        # (last dim == output_dim). Flatten to 1-D integer targets for
-        # CrossEntropyLoss which expects shape (N,).
+        # Accept either class indices or one-hot/logit vectors.
         if y.dtype in (torch.long, torch.int, torch.int32, torch.int64):
             target = y.reshape(-1)
         else:
             target = y.argmax(dim=-1).reshape(-1)
-        loss = self.cross_entropy(y_hat, target)
-        matrix_size = mean[0].size(0) * mean[0].size(1)
-
-        for m, r in zip(mean, R, strict=False):
-            C = r @ r.transpose(-2, -1)
-            det = C.det()
-            loss += (
-                0.5
-                * torch.sum(
-                    m.pow(2).sum(-1)
-                    + C.diagonal(dim1=-2, dim2=-1).sum(-1)
-                    - det.log()
-                    - 1
-                )
-                / matrix_size
-            )
-
-        amount = len(s) * len(s[0])
-        for a, b in zip(s, t_1, strict=False):
-            loss += reg * (self.mse(a[0], b[0]) + self.mse(a[1], b[1])) / amount
-
-        return loss
+        return self.cross_entropy(y_hat, target) + self._kl_reg_loss(mean, R, s, t_1, reg)

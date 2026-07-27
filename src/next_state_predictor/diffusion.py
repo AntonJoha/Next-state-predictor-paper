@@ -118,7 +118,6 @@ class DiffusionPredictor(nn.Module):
         self.t_emb_dim = t_emb_dim
         self.device = device
 
-        # GRU encoder: observation sequence → context vector
         self.context_encoder = nn.GRU(
             input_size=input_dim,
             hidden_size=hidden_size,
@@ -127,7 +126,6 @@ class DiffusionPredictor(nn.Module):
             device=device,
         )
 
-        # Noise predictor: (noisy_y, t_emb, context) → predicted noise
         self.noise_predictor = _NoisePredictor(
             output_dim=output_dim,
             hidden_size=hidden_size,
@@ -135,7 +133,6 @@ class DiffusionPredictor(nn.Module):
             device=device,
         )
 
-        # Linear noise schedule buffers
         betas = torch.linspace(beta_start, beta_end, T)
         alphas = 1.0 - betas
         alpha_bar = torch.cumprod(alphas, dim=0)
@@ -143,8 +140,6 @@ class DiffusionPredictor(nn.Module):
         self.register_buffer("betas", betas)
         self.register_buffer("alphas", alphas)
         self.register_buffer("alpha_bar", alpha_bar)
-
-    # ── Public API ────────────────────────────────────────────────────────────
 
     def get_parameters(self) -> Iterator[nn.Parameter]:
         """Return an iterator over all trainable parameters."""
@@ -242,17 +237,8 @@ class DiffusionPredictor(nn.Module):
 
         return y
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
-
     def _encode_context(self, x: torch.Tensor) -> torch.Tensor:
-        """Encode the observation sequence into a fixed-size context vector.
-
-        Args:
-            x: Observations ``(batch, seq_len, input_dim)``.
-
-        Returns:
-            Context tensor ``(batch, hidden_size)``.
-        """
+        """Encode the observation sequence into a fixed-size context vector."""
         _, h = self.context_encoder(x)
         return h.squeeze(0)
 
@@ -262,7 +248,7 @@ class DiffusionPredictor(nn.Module):
         t: torch.Tensor,
         noise: torch.Tensor,
     ) -> torch.Tensor:
-        """Forward diffusion: q(y_t | y_0) = N(sqrt(α̅_t)·y_0, (1−α̅_t)·I)."""
+        """q(y_t | y_0) = N(sqrt(α̅_t)·y_0, (1−α̅_t)·I)."""
         alpha_bar_t = self.alpha_bar[t][:, None]
         return torch.sqrt(alpha_bar_t) * y_0 + torch.sqrt(1.0 - alpha_bar_t) * noise
 
