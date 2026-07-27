@@ -8,6 +8,10 @@ let
     gymnasium
     numpy
 
+    # Notebook support
+    notebook
+    ipykernel
+
     # Development tools
     pytest
     pytest-cov
@@ -26,5 +30,6 @@ pkgs.mkShell {
     pip install --quiet --no-deps -e . 2>/dev/null || true
     echo "next-state-predictor dev shell ready."
     echo "Run:  python -m next_state_predictor.main --help"
+    echo "Run:  jupyter notebook"
   '';
 }
