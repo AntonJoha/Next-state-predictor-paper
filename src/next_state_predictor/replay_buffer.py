@@ -3,12 +3,25 @@
 from __future__ import annotations
 
 import json
+import re
 import random
 import sqlite3
 from collections import deque
 from typing import NamedTuple
 
 import numpy as np
+
+
+def _validate_table_name(table: str) -> str:
+    """Raise ValueError if *table* is not a safe SQL identifier."""
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table):
+        msg = (
+            f"Invalid table name {table!r}. "
+            "Table names must start with a letter or underscore and contain "
+            "only letters, digits, and underscores."
+        )
+        raise ValueError(msg)
+    return table
 
 
 class Transition(NamedTuple):
@@ -68,6 +81,7 @@ class ReplayBuffer:
             db_path: Path to the SQLite database file (created if absent).
             table: Table name to write to (created if absent).
         """
+        _validate_table_name(table)
         conn = sqlite3.connect(db_path)
         conn.execute(
             f"""CREATE TABLE IF NOT EXISTS {table} (
@@ -106,6 +120,7 @@ class ReplayBuffer:
             db_path: Path to the SQLite database file.
             table: Table name to read from.
         """
+        _validate_table_name(table)
         conn = sqlite3.connect(db_path)
         rows = conn.execute(
             f"SELECT state, action, reward, next_state, done FROM {table}"
