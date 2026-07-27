@@ -16,6 +16,7 @@ A template for reinforcement learning projects built on top of
 │   └── next_state_predictor/
 │       ├── __init__.py
 │       ├── agent.py                 # Agent base class + RandomAgent
+│       ├── replay_buffer.py         # Replay buffer + SQLite persistence
 │       ├── train.py                 # Training & evaluation loops
 │       ├── utils.py                 # Seed helpers
 │       └── main.py                  # CLI entry-point
@@ -65,6 +66,8 @@ pytest
 
 1. Subclass `Agent` in `src/next_state_predictor/agent.py` and implement
    `select_action`.
-2. Pass your agent to `train()` / `evaluate()` in `train.py`.
-3. Register any new Gymnasium environments you create in a separate
+2. Use `ReplayBuffer` in `replay_buffer.py` if you want to persist transitions
+   to SQLite.
+3. Pass your agent to `train()` / `evaluate()` in `train.py`.
+4. Register any new Gymnasium environments you create in a separate
    `envs/` package and import them before calling `gym.make()`.

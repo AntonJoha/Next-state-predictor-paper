@@ -22,6 +22,8 @@ pkgs.mkShell {
   name = "next-state-predictor";
 
   packages = [
+    # SQLite CLI for inspecting replay buffer databases
+    pkgs.sqlite
     pythonEnv
   ];
 
