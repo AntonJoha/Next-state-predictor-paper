@@ -37,7 +37,13 @@ def test_save_to_sqlite_stores_state_trajectories(tmp_path):
 
 def test_save_to_sqlite_rejects_invalid_trajectory_length(tmp_path):
     buffer = ReplayBuffer()
-    buffer.push(np.array([0.0], dtype=np.float32), 0, 1.0, np.array([1.0]), False)
+    buffer.push(
+        np.array([0.0], dtype=np.float32),
+        0,
+        1.0,
+        np.array([1.0], dtype=np.float32),
+        False,
+    )
     db_path = tmp_path / "transitions.db"
     with pytest.raises(ValueError, match="trajectory_length must be >= 1"):
         buffer.save_to_sqlite(str(db_path), trajectory_length=0)
