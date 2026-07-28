@@ -3,6 +3,8 @@ __pycache__/
 *.py[codz]
 *$py.class
 tags
+results/*
+*.db
 # C extensions
 *.so
 

@@ -1,35 +1,38 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ }:
 
 let
-  python = pkgs.python312;
-
-  pythonEnv = python.withPackages (ps: with ps; [
-    # Core dependencies
-    gymnasium
-    numpy
-
-    # Notebook support
-    notebook
+  pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/nixos-26.05.tar.gz") {};
+  
+  python = pkgs.python3.withPackages (ps: with ps; [
+    jupyterlab
     ipykernel
+    matplotlib
+    numpy
+    pandas
+    torch
+    gymnasium
+    pip
 
-    # Development tools
-    pytest
-    pytest-cov
+
   ]);
+
 in
-
 pkgs.mkShell {
-  name = "next-state-predictor";
-
-  packages = [
-    pythonEnv
+  buildInputs = [
+    python
+    pkgs.geos
+    pkgs.gdal
+    pkgs.proj
   ];
 
+  packages = [
+    python
+  ];
   shellHook = ''
     # Install the project in editable mode so imports resolve correctly.
-    pip install --quiet --no-deps -e . 2>/dev/null || true
-    echo "next-state-predictor dev shell ready."
+    export PYTHONPATH=$PWD/src:$PYTHONPATH
+    python -c "import next_state_predictor; print(next_state_predictor.__file__)"
     echo "Run:  python -m next_state_predictor.main --help"
     echo "Run:  jupyter notebook"
-  '';
+    '';
 }
