@@ -10,6 +10,8 @@ from scripts.evaluate_models import (
     split_episode_data,
 )
 
+EPISODE_ID_DIVISOR = 10
+
 
 def test_split_episode_data_keeps_episodes_intact():
     episode_lengths = [2, 2, 2, 2]
@@ -29,7 +31,7 @@ def test_split_episode_data_keeps_episodes_intact():
     assert test_states.shape == test_next_states.shape
 
     def episode_ids(values: np.ndarray) -> list[int]:
-        return [int(v[0] // 10) for v in values]
+        return [int(v[0] // EPISODE_ID_DIVISOR) for v in values]
 
     def split_ids(values: np.ndarray, lengths: list[int]) -> list[int]:
         ids: list[int] = []

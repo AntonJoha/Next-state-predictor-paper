@@ -160,7 +160,8 @@ def split_episode_data(
     """Split raw transitions into disjoint train/test episode sets.
 
     The split happens at episode boundaries so that overlapping windows never
-    appear in both sets.
+    appear in both sets. The helper requires at least two episodes and always
+    keeps at least one episode in both the training and test partitions.
     """
     test_episode_indices = _select_test_episode_indices(len(episode_lengths), test_split, seed)
 
@@ -241,7 +242,7 @@ def _select_test_episode_indices(
 ) -> set[int]:
     """Choose which episodes belong to the held-out split."""
     if not 0.0 < test_split < 1.0:
-        msg = "test_split must be between 0 and 1 (exclusive)."
+        msg = f"test_split must be between 0 and 1 (exclusive), got {test_split}."
         raise ValueError(msg)
     if n_episodes < 2:
         msg = "Need at least two episodes to create a train/test split."
