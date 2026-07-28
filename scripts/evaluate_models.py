@@ -143,6 +143,118 @@ def build_sequences(
     return np.stack(xs), np.stack(x1s), np.stack(ys)
 
 
+def split_episode_data(
+    states: np.ndarray,
+    next_states: np.ndarray,
+    episode_lengths: list[int],
+    test_split: float,
+    seed: int,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    list[int],
+    np.ndarray,
+    np.ndarray,
+    list[int],
+]:
+    """Split raw transitions into disjoint train/test episode sets.
+
+    The split happens at episode boundaries so that overlapping windows never
+    appear in both sets. The helper requires at least two episodes and always
+    keeps at least one episode in both the training and test partitions.
+    """
+    test_episode_indices = _select_test_episode_indices(len(episode_lengths), test_split, seed)
+
+    train_states: list[np.ndarray] = []
+    train_next_states: list[np.ndarray] = []
+    train_lengths: list[int] = []
+    test_states: list[np.ndarray] = []
+    test_next_states: list[np.ndarray] = []
+    test_lengths: list[int] = []
+
+    start = 0
+    for episode_index, ep_len in enumerate(episode_lengths):
+        end = start + ep_len
+        if episode_index in test_episode_indices:
+            test_states.append(states[start:end])
+            test_next_states.append(next_states[start:end])
+            test_lengths.append(ep_len)
+        else:
+            train_states.append(states[start:end])
+            train_next_states.append(next_states[start:end])
+            train_lengths.append(ep_len)
+        start = end
+
+    return (
+        np.concatenate(train_states, axis=0),
+        np.concatenate(train_next_states, axis=0),
+        train_lengths,
+        np.concatenate(test_states, axis=0),
+        np.concatenate(test_next_states, axis=0),
+        test_lengths,
+    )
+
+
+def prepare_datasets(
+    states: np.ndarray,
+    next_states: np.ndarray,
+    episode_lengths: list[int],
+    seq_len: int,
+    test_split: float,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Build train/test sequence batches without leaking test statistics."""
+    (
+        train_states,
+        train_next_states,
+        train_episode_lengths,
+        test_states,
+        test_next_states,
+        test_episode_lengths,
+    ) = split_episode_data(states, next_states, episode_lengths, test_split, seed)
+
+    train_combined_obs = np.concatenate([train_states, train_next_states], axis=0)
+    _, lo, hi = normalise(train_combined_obs)
+    train_states_n, _, _ = normalise(train_states, lo, hi)
+    train_next_states_n, _, _ = normalise(train_next_states, lo, hi)
+    test_states_n, _, _ = normalise(test_states, lo, hi)
+    test_next_states_n, _, _ = normalise(test_next_states, lo, hi)
+
+    x_train, x1_train, y_train = build_sequences(
+        train_states_n,
+        train_next_states_n,
+        seq_len,
+        train_episode_lengths,
+    )
+    x_test, x1_test, y_test = build_sequences(
+        test_states_n,
+        test_next_states_n,
+        seq_len,
+        test_episode_lengths,
+    )
+    return x_train, x1_train, y_train, x_test, x1_test, y_test
+
+
+def _select_test_episode_indices(
+    n_episodes: int,
+    test_split: float,
+    seed: int,
+) -> set[int]:
+    """Choose which episodes belong to the held-out split."""
+    if not 0.0 < test_split < 1.0:
+        msg = f"test_split must be between 0 and 1 (exclusive), got {test_split}."
+        raise ValueError(msg)
+    if n_episodes < 2:
+        msg = "Need at least two episodes to create a train/test split."
+        raise ValueError(msg)
+
+    n_test = int(round(n_episodes * test_split))
+    n_test = min(max(n_test, 1), n_episodes - 1)
+
+    rng = np.random.default_rng(seed)
+    return set(rng.permutation(n_episodes)[:n_test].tolist())
+
+
 def normalise(
     arr: np.ndarray,
     lo: np.ndarray | None = None,
@@ -568,28 +680,25 @@ def main() -> None:
     states, next_states, episode_lengths = collect_transitions(args.env, args.episodes, args.seed)
     print(f"  {len(states)} transitions collected; obs_dim={states.shape[1]}")
 
-    # ── normalise ──────────────────────────────────────────────────────────────
-    all_obs = np.concatenate([states, next_states], axis=0)
-    _, lo, hi = normalise(all_obs)
-    states_n, _, _ = normalise(states, lo, hi)
-    next_states_n, _, _ = normalise(next_states, lo, hi)
+    # ── split by episode to avoid overlapping-window leakage ──────────────────
+    # ── build train/test datasets without leakage ─────────────────────────────
+    x_train, x1_train, y_train, x_test, x1_test, y_test = prepare_datasets(
+        states,
+        next_states,
+        episode_lengths,
+        args.seq_len,
+        args.test_split,
+        args.seed,
+    )
+    input_dim = output_dim = x_train.shape[2]
 
-    # ── build sequences ────────────────────────────────────────────────────────
-    x_all, x1_all, y_all = build_sequences(states_n, next_states_n, args.seq_len, episode_lengths)
-    input_dim = output_dim = x_all.shape[2]
-    N = x_all.shape[0]
-    split = int(N * (1.0 - args.test_split))
+    x_train = to_tensor(x_train, device)
+    x1_train = to_tensor(x1_train, device)
+    y_train = to_tensor(y_train, device)
 
-    perm = np.random.default_rng(args.seed).permutation(N)
-    train_idx, test_idx = perm[:split], perm[split:]
-
-    x_train = to_tensor(x_all[train_idx], device)
-    x1_train = to_tensor(x1_all[train_idx], device)
-    y_train = to_tensor(y_all[train_idx], device)
-
-    x_test = to_tensor(x_all[test_idx], device)
-    x1_test = to_tensor(x1_all[test_idx], device)
-    y_test = to_tensor(y_all[test_idx], device)
+    x_test = to_tensor(x_test, device)
+    x1_test = to_tensor(x1_test, device)
+    y_test = to_tensor(y_test, device)
 
     print(f"  Train samples: {x_train.size(0)}   Test samples: {x_test.size(0)}")
     print()
