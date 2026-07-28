@@ -162,19 +162,7 @@ def split_episode_data(
     The split happens at episode boundaries so that overlapping windows never
     appear in both sets.
     """
-    if not 0.0 < test_split < 1.0:
-        msg = "test_split must be between 0 and 1 (exclusive)."
-        raise ValueError(msg)
-    n_episodes = len(episode_lengths)
-    if n_episodes < 2:
-        msg = "Need at least two episodes to create a train/test split."
-        raise ValueError(msg)
-
-    n_test = int(round(n_episodes * test_split))
-    n_test = min(max(n_test, 1), n_episodes - 1)
-
-    rng = np.random.default_rng(seed)
-    test_episode_indices = set(rng.permutation(n_episodes)[:n_test].tolist())
+    test_episode_indices = _select_test_episode_indices(len(episode_lengths), test_split, seed)
 
     train_states: list[np.ndarray] = []
     train_next_states: list[np.ndarray] = []
@@ -224,8 +212,8 @@ def prepare_datasets(
         test_episode_lengths,
     ) = split_episode_data(states, next_states, episode_lengths, test_split, seed)
 
-    train_obs = np.concatenate([train_states, train_next_states], axis=0)
-    _, lo, hi = normalise(train_obs)
+    train_combined_obs = np.concatenate([train_states, train_next_states], axis=0)
+    _, lo, hi = normalise(train_combined_obs)
     train_states_n, _, _ = normalise(train_states, lo, hi)
     train_next_states_n, _, _ = normalise(train_next_states, lo, hi)
     test_states_n, _, _ = normalise(test_states, lo, hi)
@@ -244,6 +232,26 @@ def prepare_datasets(
         test_episode_lengths,
     )
     return x_train, x1_train, y_train, x_test, x1_test, y_test
+
+
+def _select_test_episode_indices(
+    n_episodes: int,
+    test_split: float,
+    seed: int,
+) -> set[int]:
+    """Choose which episodes belong to the held-out split."""
+    if not 0.0 < test_split < 1.0:
+        msg = "test_split must be between 0 and 1 (exclusive)."
+        raise ValueError(msg)
+    if n_episodes < 2:
+        msg = "Need at least two episodes to create a train/test split."
+        raise ValueError(msg)
+
+    n_test = int(round(n_episodes * test_split))
+    n_test = min(max(n_test, 1), n_episodes - 1)
+
+    rng = np.random.default_rng(seed)
+    return set(rng.permutation(n_episodes)[:n_test].tolist())
 
 
 def normalise(

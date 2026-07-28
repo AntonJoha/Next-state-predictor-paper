@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from scripts.evaluate_models import prepare_datasets, split_episode_data
+from scripts.evaluate_models import (
+    _select_test_episode_indices,
+    prepare_datasets,
+    split_episode_data,
+)
 
 
 def test_split_episode_data_keeps_episodes_intact():
@@ -47,8 +51,7 @@ def test_prepare_datasets_uses_training_only_normalization():
     seed = 0
     test_split = 0.5
     n_episodes = len(episode_lengths)
-    n_test = int(round(n_episodes * test_split))
-    test_episode_indices = set(np.random.default_rng(seed).permutation(n_episodes)[:n_test].tolist())
+    test_episode_indices = _select_test_episode_indices(n_episodes, test_split, seed)
 
     states = []
     next_states = []
