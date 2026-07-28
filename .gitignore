@@ -5,6 +5,7 @@ __pycache__/
 tags
 results/*
 *.db
+*.npz
 # C extensions
 *.so
 
