@@ -163,7 +163,7 @@ def split_episode_data(
     appear in both sets.
     """
     if not 0.0 < test_split < 1.0:
-        msg = "--test-split must be between 0 and 1."
+        msg = "test_split must be between 0 and 1 (exclusive)."
         raise ValueError(msg)
     n_episodes = len(episode_lengths)
     if n_episodes < 2:

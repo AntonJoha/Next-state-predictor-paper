@@ -42,7 +42,7 @@ def test_split_episode_data_keeps_episodes_intact():
     assert set(train_ids).isdisjoint(test_ids)
 
 
-def test_prepare_datasets_uses_training_only_normalisation():
+def test_prepare_datasets_uses_training_only_normalization():
     episode_lengths = [2, 2, 2, 2]
     seed = 0
     test_split = 0.5
