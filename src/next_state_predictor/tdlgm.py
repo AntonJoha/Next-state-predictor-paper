@@ -127,9 +127,13 @@ class Generator(nn.Module):
             nn.Tanh(),
         )
 
-        self.output_layer = nn.Sequential(
+        self.mean_layer = nn.Sequential(
             nn.Linear(hidden_size, output_dim, device=device),
             nn.Sigmoid(),
+        )
+        self.variance_layer = nn.Sequential(
+            nn.Linear(hidden_size, output_dim, device=device),
+            nn.Softplus(),
         )
 
     def forward(self, batch_size=1):
@@ -139,7 +143,7 @@ class Generator(nn.Module):
         v = self.initial_transform(self.xi[0])
         for i, layer in enumerate(self.gen_layers, start=1):
             v = layer(v, self.xi[i])
-        return self.output_layer(v[:, -1, :]), self.get_internal_state()
+        return self.mean_layer(v[:, -1, :]), self.variance_layer(v[:, -1, :]), self.get_internal_state()
 
     def get_internal_state(self):
         return [layer.get_internal_state() for layer in self.gen_layers]
@@ -211,7 +215,7 @@ class RecLayer(nn.Module):
         d_safe = d.clamp(min=epsilon)
         # Adding epsilon after diag_embed ensures every element (including
         # off-diagonals) is positive before sqrt, avoiding undefined gradients.
-        D_inv = torch.diag_embed(1.0 / d_safe) + epsilon
+        D_inv = torch.diag_embed(1.0 / d_safe + epsilon)
         D_inv_sqrt = torch.sqrt(D_inv)
         u_r = u.unsqueeze(-1)
         U = torch.matmul(u_r, u_r.transpose(-2, -1))
@@ -275,6 +279,7 @@ class tDLGM(nn.Module):
 
         self.model_r = Recognition(input_dim, latent_dim, layers, device)
 
+        self.loss = nn.GaussianNLLLoss()
         self.mse = nn.MSELoss()
 
     def get_parameters(self) -> Iterator[nn.Parameter]:
@@ -284,9 +289,11 @@ class tDLGM(nn.Module):
             self.model_r.parameters(),
         )
 
-    def _loss(self, y, y_hat, mean, R, s, t_1, reg) -> torch.Tensor:
-        target = y.reshape_as(y_hat)
-        loss = self.mse(y_hat, target)
+    def _loss(self, y, mean_pred, var_pred, mean, R, s, t_1, reg) -> torch.Tensor:
+        
+        loss = self._gaussian_loss(y, mean_pred, var_pred)
+
+
         matrix_size = mean[0].size(0) * mean[0].size(1)
 
         for m, r in zip(mean, R, strict=False):
@@ -309,12 +316,33 @@ class tDLGM(nn.Module):
 
         return loss
 
-    def get_loss(self, x, x_1, y) -> float:
-        return self.train_step(x, x_1, y, optimizer=None)
 
-    def train_step(self, x, x_1, y, optimizer) -> float:
+    def _gaussian_loss(self, y, mean_pred, var_pred) -> torch.Tensor:
+        target = y.reshape_as(mean_pred)
+        return self.loss(mean_pred, target, var_pred)
+
+
+
+# TODO THIS NEEDS TO BE ADDRESSED, WE DO NOT KNOW THE FUTURE ACTION SO HOW CAN WE ENCODE IT?
+# The solution so far is to pad an "illegal" action to the end of the sequence, but this is not ideal and should be fixed in the future.
+    def _make_x1(self, x, y):
+        
+        x_size = x.shape[-1]
+        y_size = y.shape[-1]
+        
+        y_padded = torch.cat((y, torch.zeros(y.size(0), x_size - y_size, device=y.device) -1 ), dim=-1).unsqueeze(1)
+
+        return torch.cat((x, y_padded), dim=1)[:, 1:, :]
+
+
+    def get_loss(self, x, y) -> float:
+        return self.train_step(x, y, optimizer=None)
+
+    def train_step(self, x, y, optimizer) -> float:
         if optimizer is not None:
             optimizer.zero_grad()
+
+        x_1 = self._make_x1(x, y)
 
         t = self.model_t(x)
         t_1 = self.model_t(x_1)
@@ -323,64 +351,27 @@ class tDLGM(nn.Module):
         mean, R, z = self.model_r(x_1)
         self.model_g.set_xi(z)
 
-        pred, h = self.model_g(x.size(0))
+        mean_pred, var_pred, h = self.model_g(x.size(0))
 
-        loss = self._loss(y, pred, mean, R, h, t_1, reg=0.01)
+        loss = self._loss(y, mean_pred, var_pred, mean, R, h, t_1, reg=0.01)
 
         if optimizer is not None:
             loss.backward()
             optimizer.step()
-        return loss.item()
+
+        with torch.no_grad():
+            gaussian_loss = self._gaussian_loss(y, mean_pred, var_pred)
+        
+        return loss.item(), gaussian_loss.item()
 
     def forward(self, x) -> torch.Tensor:
         self.model_g.make_internal_state(x.size(0))
         t = self.model_t(x)
         self.model_g.set_internal_state(t)
         self.model_g.make_xi(x.size(0))
-        val, _ = self.model_g(x.size(0))
-        return val
+        mean_pred, var_pred, _ = self.model_g(x.size(0))
+        return mean_pred, var_pred
 
-
-class tDLGMCrossEntropy(tDLGM):
-    def __init__(
-        self,
-        input_dim=1,
-        hidden_size=1,
-        latent_dim=1,
-        output_dim=1,
-        layers=1,
-        seq_len=1,
-        device=None,
-    ):
-        super().__init__(
-            input_dim, hidden_size, latent_dim, output_dim, layers, seq_len, device
-        )
-        self.cross_entropy = nn.CrossEntropyLoss()
-
-    def _loss(self, y, y_hat, mean, R, s, t_1, reg) -> torch.Tensor:
-        target = y.argmax(dim=-1)
-        loss = self.cross_entropy(y_hat, target)
-        matrix_size = mean[0].size(0) * mean[0].size(1)
-
-        for m, r in zip(mean, R, strict=False):
-            C = r @ r.transpose(-2, -1)
-            det = C.det()
-            loss += (
-                0.5
-                * torch.sum(
-                    m.pow(2).sum(-1)
-                    + C.diagonal(dim1=-2, dim2=-1).sum(-1)
-                    - det.log()
-                    - 1
-                )
-                / matrix_size
-            )
-
-        amount = len(s) * len(s[0])
-        for a, b in zip(s, t_1, strict=False):
-            loss += reg * (self.mse(a[0], b[0]) + self.mse(a[1], b[1])) / amount
-
-        return loss
 
 
 # ── Self-test ─────────────────────────────────────────────────────────────────
@@ -396,39 +387,19 @@ if __name__ == "__main__":
         seq_len=3,
         device=device,
     ).to(device)
-    optimizer = Adam(model.get_parameters(), lr=0.1)
+    optimizer = Adam(model.get_parameters(), lr=0.001)
 
     x = torch.randn(50, 3, 10).to(device)  # used for the state recognition
     y = torch.randn(50, 1, 10).to(device)  # the value to be reconstructed
     x_1 = torch.cat((x, y), dim=1)[:, 1:, :]  # used for the recognition
 
-    before = model.get_loss(x, x_1, y)
+    before = model.get_loss(x, y)
     for _ in range(300):
-        loss = model.train_step(x, x_1, y, optimizer)
-    after = model.get_loss(x, x_1, y)
+        loss = model.train_step(x, y, optimizer)
+        print(f"Training loss: {loss}")
+    after = model.get_loss(x, y)
     print(f"Loss before training: {before}")
     print(f"Loss after training: {after}")
     assert after < before, "Loss did not decrease after training! MSELoss"
 
-    model = tDLGMCrossEntropy(
-        input_dim=10,
-        hidden_size=20,
-        latent_dim=5,
-        output_dim=10,
-        layers=2,
-        seq_len=3,
-        device=device,
-    ).to(device)
-    optimizer = Adam(model.get_parameters(), lr=0.1)
 
-    x = torch.randn(50, 3, 10).to(device)  # used for the state recognition
-    y = torch.randint(0, 10, (50, 1)).to(device)  # the value to be reconstructed (class labels)
-    x_1 = torch.cat((x, nn.functional.one_hot(y.squeeze(), num_classes=10).float().unsqueeze(1)), dim=1)[:, 1:, :]  # used for the recognition
-
-    before = model.get_loss(x, x_1, y)
-    for _ in range(300):
-        loss = model.train_step(x, x_1, y, optimizer)
-    after = model.get_loss(x, x_1, y)
-    print(f"Loss before training: {before}")
-    print(f"Loss after training: {after}")
-    assert after < before, "Loss did not decrease after training! CrossEntropyLoss"
