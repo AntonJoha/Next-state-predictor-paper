@@ -213,8 +213,7 @@ class RecLayer(nn.Module):
         # D is diagonal, so its inverse is just the elementwise reciprocal of d.
         # Clamping d prevents inf when sigmoid output underflows to 0.
         d_safe = d.clamp(min=epsilon)
-        # Adding epsilon after diag_embed ensures every element (including
-        # off-diagonals) is positive before sqrt, avoiding undefined gradients.
+        # Adding epsilon in diag_embed ensures every element is non-negative before sqrt, avoiding undefined gradients.
         D_inv = torch.diag_embed(1.0 / d_safe + epsilon)
         D_inv_sqrt = torch.sqrt(D_inv)
         u_r = u.unsqueeze(-1)
