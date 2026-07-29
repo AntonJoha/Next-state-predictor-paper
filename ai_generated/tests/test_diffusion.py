@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import torch
 import pytest
-
+import torch
 from next_state_predictor.diffusion import DiffusionPredictor
 
 DEVICE = torch.device("cpu")

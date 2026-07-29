@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import gymnasium as gym
 import pytest
-
 from next_state_predictor.hyperparameter_tuning import (
     TrialResult,
     TuningResult,

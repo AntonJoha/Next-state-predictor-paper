@@ -1,13 +1,16 @@
 
 
-from next_state_predictor.dqn_agent import DQNAgent, ReplayBuffer
-from typing import Any, Iterable, Callable
-import gymnasium as gym
-import os
-import torch
 import argparse
-import numpy as np
+import os
 import time
+from collections.abc import Callable, Iterable
+from typing import Any
+
+import gymnasium as gym
+import numpy as np
+import torch
+
+from next_state_predictor.dqn_agent import DQNAgent, ReplayBuffer
 
 
 def _get_optimizer_lambda(args: argparse.Namespace) -> Callable[[Iterable[torch.nn.Parameter]], torch.optim.Optimizer]:
@@ -143,6 +146,7 @@ def train_rl(args) -> None:
 if __name__ == "__main__":
     import argparse
     import os
+
     import numpy as np
 
     parser = argparse.ArgumentParser(description="Train RL agent and save data")

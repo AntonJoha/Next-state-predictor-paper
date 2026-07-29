@@ -1,9 +1,9 @@
 import argparse
 import os
-import torch
+
 import numpy as np
-import argparse
-from torch.utils.data import Dataset, DataLoader, random_split
+import torch
+from torch.utils.data import DataLoader, Dataset, random_split
 
 
 def _prepare_trajectories(lookback: int, trajectories) -> np.ndarray:
@@ -73,7 +73,7 @@ def _get_basic_mlp_model(args: argparse.Namespace, dataset: NextStateDataset):
 
     class BasicMLP(torch.nn.Module):
         def __init__(self, input_dim, output_dim):
-            super(BasicMLP, self).__init__()
+            super().__init__()
             self.model = torch.nn.Sequential(
                 torch.nn.Linear(input_dim, 128),
                 torch.nn.ReLU(),

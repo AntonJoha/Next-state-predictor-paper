@@ -230,10 +230,7 @@ class DiffusionPredictor(nn.Module):
                 y - beta_t / torch.sqrt(1.0 - alpha_bar_t) * pred_noise
             ) / torch.sqrt(alpha_t)
 
-            if t_idx > 0:
-                y = mean + torch.sqrt(beta_t) * torch.randn_like(y)
-            else:
-                y = mean
+            y = mean + torch.sqrt(beta_t) * torch.randn_like(y) if t_idx > 0 else mean
 
         return y
 

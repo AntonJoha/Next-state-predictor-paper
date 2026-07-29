@@ -4,6 +4,10 @@ __pycache__/
 *$py.class
 tags
 results/*
+results_dev/*
+rl_data/*
+rl_data_dev/*
+
 *.db
 *.npz
 # C extensions

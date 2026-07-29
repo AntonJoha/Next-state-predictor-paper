@@ -29,11 +29,11 @@ import torch
 
 matplotlib.use("Agg")  # headless backend — must come before pyplot import
 import matplotlib.pyplot as plt  # noqa: E402
-
 from next_state_predictor.diffusion import DiffusionPredictor
-from next_state_predictor.tdlgm import tDLGM
 from next_state_predictor.utils import set_seed
 from next_state_predictor.vrnn import VRNN
+
+from next_state_predictor.tdlgm import tDLGM
 
 # ── colour palette ─────────────────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ def build_sequences(
                 ys.append(next_states[i + seq_len : i + seq_len + 1])
             start = end
     else:
-        if N <= seq_len:
+        if seq_len >= N:
             msg = f"Need more than seq_len={seq_len} transitions; got {N}."
             raise ValueError(msg)
         for i in range(N - seq_len):
@@ -563,7 +563,7 @@ def plot_comparison(
 
     # 1. Loss curves
     fig, ax = plt.subplots(figsize=(9, 5))
-    for name, colour in zip(model_names, colours):
+    for name, colour in zip(model_names, colours, strict=False):
         ax.plot(all_loss_histories[name], label=name, color=colour, linewidth=1.8)
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Training loss")
@@ -602,7 +602,7 @@ def plot_comparison(
         notch=False,
         medianprops={"color": "black", "linewidth": 2},
     )
-    for patch, colour in zip(bp["boxes"], colours):
+    for patch, colour in zip(bp["boxes"], colours, strict=False):
         patch.set_facecolor(colour)
         patch.set_alpha(0.7)
     ax.set_ylabel("Per-sample MSE")
@@ -615,7 +615,7 @@ def plot_comparison(
     x = np.arange(output_dim)
     width = 0.8 / len(model_names)
     fig, ax = plt.subplots(figsize=(max(6, output_dim * 2), 5))
-    for i, (name, colour) in enumerate(zip(model_names, colours)):
+    for i, (name, colour) in enumerate(zip(model_names, colours, strict=False)):
         preds = all_eval_results[name]["predictions"]
         targets = all_eval_results[name]["targets"]
         mae_per_dim = np.abs(preds - targets).mean(axis=0)
@@ -732,7 +732,7 @@ def main() -> None:
         )
         train_time = time.time() - t0
 
-        print(f"  evaluating …")
+        print("  evaluating …")
         eval_result = evaluate_model(model, x_test, x1_test, y_test, args.batch_size)
 
         all_loss_histories[model_name] = loss_history
@@ -756,7 +756,7 @@ def main() -> None:
             "train_time_seconds": round(train_time, 2),
         }
 
-        print(f"  saving individual plots …")
+        print("  saving individual plots …")
         plot_individual(model_name, loss_history, eval_result, output_dir)
 
     # ── comparison plots ───────────────────────────────────────────────────────

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 import torch.nn.functional as F
-import pytest
 
 from next_state_predictor.tdlgm import (
     tDLGM,

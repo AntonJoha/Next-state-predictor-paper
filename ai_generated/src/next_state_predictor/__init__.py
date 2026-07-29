@@ -2,10 +2,14 @@
 
 from next_state_predictor.agent import Agent, RandomAgent
 from next_state_predictor.diffusion import DiffusionPredictor
-from next_state_predictor.hyperparameter_tuning import TrialResult, TuningResult, tune_dqn
+from next_state_predictor.hyperparameter_tuning import (
+    TrialResult,
+    TuningResult,
+    tune_dqn,
+)
 from next_state_predictor.tdlgm import (
-    GenLayer,
     Generator,
+    GenLayer,
     RecLayer,
     Recognition,
     TimeLayer,

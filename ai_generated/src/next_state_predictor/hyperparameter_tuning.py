@@ -5,8 +5,9 @@ from __future__ import annotations
 import itertools
 import random
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import gymnasium as gym
 
@@ -97,7 +98,7 @@ def tune_dqn(
 
     keys = list(param_grid.keys())
     all_combinations: list[dict[str, Any]] = [
-        dict(zip(keys, combo)) for combo in itertools.product(*param_grid.values())
+        dict(zip(keys, combo, strict=False)) for combo in itertools.product(*param_grid.values())
     ]
 
     if n_trials is None:

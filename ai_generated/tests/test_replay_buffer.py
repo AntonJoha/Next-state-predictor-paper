@@ -7,7 +7,6 @@ import sqlite3
 
 import numpy as np
 import pytest
-
 from next_state_predictor.replay_buffer import ReplayBuffer
 
 
