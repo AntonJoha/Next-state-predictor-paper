@@ -3,8 +3,11 @@
 _:
 	python -m next_state_predictor.main 
 
+test_acrobot:
+	python -m next_state_predictor.main --env Acrobot-v1  --num_episodes 10 
 
-commit: lint clean test
+
+commit: lint test test_acrobot 
 	git add .
 	git commit -m "commit"
 	git push

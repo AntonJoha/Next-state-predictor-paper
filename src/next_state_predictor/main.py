@@ -18,10 +18,10 @@ def parse_arguments() -> argparse.Namespace:
         "--env", type=str, default="CartPole-v1", help="Environment name"
     )
     parser.add_argument(
-        "--num_episodes", type=int, default=50, help="Number of episodes to run"
+        "--num_episodes", type=int, default=10, help="Number of episodes to run"
     )
     parser.add_argument(
-        "--max_steps", type=int, default=200, help="Maximum number of steps per episode"
+        "--max_steps", type=int, default=50, help="Maximum number of steps per episode"
     )
     parser.add_argument(
         "--rl_output_dir",
@@ -120,8 +120,10 @@ def _save_results(results, args):
         output_dir, f"json_{args.next_state_predictor}_{unique_id}.json"
     )
 
+    to_save = {"results": results["results"], "model": model_path, "config": vars(args)}
+
     with open(json_path, "w") as f:
-        json.dump(results["results"], f, indent=4)
+        json.dump(to_save, f, indent=4)
 
     torch.save(results["model"], model_path)
 
