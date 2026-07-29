@@ -335,10 +335,10 @@ class tDLGM(nn.Module):
         return torch.cat((x, y_padded), dim=1)[:, 1:, :]
 
 
-    def get_loss(self, x, y) -> float:
+    def get_loss(self, x, y) -> tuple[float, float]:
         return self.train_step(x, y, optimizer=None)
 
-    def train_step(self, x, y, optimizer) -> float:
+    def train_step(self, x, y, optimizer) -> tuple[float, float]:
         if optimizer is not None:
             optimizer.zero_grad()
 
