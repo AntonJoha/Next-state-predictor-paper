@@ -3,7 +3,7 @@ import os
 import torch
 import numpy as np
 import argparse
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 
 
 def _prepare_trajectories(lookback: int, trajectories) -> np.ndarray:
@@ -127,7 +127,7 @@ def _get_model(args: argparse.Namespace, predictor_input: NextStateDataset):
         return _get_tdlgm_model(args, dataset)
 
 
-def _get_dataset(args: argparse.Namespace, predictor_input: str) -> NextStateDataset:
+def _get_dataset(args: argparse.Namespace, predictor_input: str, percent_split: float) -> NextStateDataset:
 
 
     dataset = np.load(predictor_input)
@@ -141,34 +141,70 @@ def _get_dataset(args: argparse.Namespace, predictor_input: str) -> NextStateDat
         next_states=dataset['next_states'],
         lookback=args.lookback
     )
-    return DataLoader(dataset, shuffle=True,
-                      batch_size=args.batch_size if hasattr(args, 'batch_size') else 32)
+
+    train_dataset, val_dataset = random_split(dataset, [int((1-percent_split) * len(dataset)), len(dataset) - int((1-percent_split) len(dataset))])
+
+    return DataLoader(train_dataset, shuffle=True,
+                      batch_size=args.batch_size if hasattr(args, 'batch_size') else 32), DataLoader(val_dataset, shuffle=True, batch_size=args.batch_size if hasattr(args, 'batch_size') else 32)
 
 
 
 
-def _train(args: argparse.Namespace, model: torch.nn.Module, dataset: DataLoader) -> torch.nn.Module:
+def _test_loss(model: torch.nn.Module, dataset: DataLoader) -> float:
+    model.eval()
+    total_loss = 0.0
+    eval_list = []
+    with torch.no_grad():
+        for _, (trajectory, _, _, _, next_state) in enumerate(dataset):
+            output = model.get_loss(trajectory, next_state)[1]
+            eval_list.append(output)
+
+    return eval_list
+
+
+def _train(args: argparse.Namespace, model: torch.nn.Module, train_dataset: DataLoader, test_dataset: DataLoader) -> torch.nn.Module:
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.next_state_lr if hasattr(args, 'next_state_lr') else 0.001)
 
     num_epochs = args.next_state_num_epochs if hasattr(args, 'next_state_num_epochs') else 10
 
-    for epoch in range(num_epochs):
-        for _, (trajectory, _, _, _, next_state) in enumerate(dataset):
-            loss = model.train_step(trajectory, next_state, optimizer)
-            
-        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss}")
+    loss_history = []
+    test_loss_history = []
 
-    return model
+    
+    model.train()
+    for epoch in range(num_epochs):
+        loss_epoch = []
+        for _, (trajectory, _, _, _, next_state) in enumerate(train_dataset):
+            loss = model.train_step(trajectory, next_state, optimizer)
+            loss_epoch.append(loss)
+
+        test_loss_history.append(_test_loss(model, test_dataset))
+        loss_history.append(loss_epoch)
+
+            
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss} Eval Loss: {np.mean(test_loss_history[-1])}")
+
+
+    return model,{"loss_history": loss_history}
+
+
+def evaluate_next_state_predictor(args: argparse.Namespace, model: torch.nn.Module, predictor_input: str) -> dict:
+    _, test_dataset = _get_dataset(args, predictor_input, percent_split=0.2)
+    eval_results = _test_loss(model, test_dataset)
+    return {"eval_results": eval_results}
+
 
 def train_next_state_predictor(args: argparse.Namespace, predictor_input: str) -> None:
     os.makedirs(args.rl_output_dir, exist_ok=True)
 
-    dataset = _get_dataset(args, predictor_input)
+    train_dataset, test_dataset = _get_dataset(args, predictor_input, percent_split=0.2)
     
     model = _get_model(args, predictor_input)
 
-    model = _train(args, model, dataset)
+    model, results = _train(args, model, train_dataset, test_dataset)
+
+    return {"model": model, "results": results}
 
 
 
