@@ -157,7 +157,7 @@ def _train(args: argparse.Namespace, model: torch.nn.Module, dataset: DataLoader
         for _, (trajectory, _, _, _, next_state) in enumerate(dataset):
             loss = model.train_step(trajectory, next_state, optimizer)
             
-        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss:.10f}")
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss}")
 
     return model
 
@@ -180,8 +180,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--next_state_predictor_input", type=str, default=None, help="File to save the next state predictor input data."
     )
-
-
-
+    args = parser.parse_args()
 
     train_next_state_predictor(args, args.next_state_predictor_input)
