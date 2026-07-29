@@ -137,7 +137,10 @@ def _get_model(args: argparse.Namespace, predictor_input: NextStateDataset):
 
 
 def _get_dataset(
-    args: argparse.Namespace, predictor_input: str, percent_split: float
+    args: argparse.Namespace,
+    predictor_input: str,
+    batch_size: int,
+    percent_split: float,
 ) -> NextStateDataset:
 
     dataset = np.load(predictor_input)
@@ -150,6 +153,12 @@ def _get_dataset(
         next_states=dataset["next_states"],
         lookback=args.lookback,
     )
+    if percent_split == 0:
+        return DataLoader(
+            dataset,
+            shuffle=True,
+            batch_size=batch_size,
+        ), None
 
     train_dataset, val_dataset = random_split(
         dataset,
@@ -162,23 +171,35 @@ def _get_dataset(
     return DataLoader(
         train_dataset,
         shuffle=True,
-        batch_size=args.batch_size if hasattr(args, "batch_size") else 32,
+        batch_size=batch_size,
     ), DataLoader(
         val_dataset,
         shuffle=True,
-        batch_size=args.batch_size if hasattr(args, "batch_size") else 32,
+        batch_size=batch_size,
     )
 
 
 def _test_loss(model: torch.nn.Module, dataset: DataLoader) -> float:
     model.eval()
     eval_list = []
+    mean_list = []
+    var_list = []
+    next_state_list = []
     with torch.no_grad():
         for _, (trajectory, _, _, _, next_state) in enumerate(dataset):
-            output = model.get_loss(trajectory, next_state)[1]
-            eval_list.append(output)
+            mean, var = model(trajectory)
+            loss = model.gaussian_loss(mean, next_state, var).item()
+            eval_list.append(loss)
+            mean_list.append(mean.tolist())
+            var_list.append(var.tolist())
+            next_state_list.append(next_state.tolist())
 
-    return eval_list
+    return {
+        "loss": eval_list,
+        "predicted_mean": mean_list,
+        "actual": next_state_list,
+        "predicted_var": var_list,
+    }
 
 
 def _train(
@@ -211,7 +232,7 @@ def _train(
         loss_history.append(loss_epoch)
 
         print(
-            f"Epoch [{epoch + 1}/{num_epochs}], Loss: {loss} Eval Loss: {np.mean(test_loss_history[-1])}"
+            f"Epoch [{epoch + 1}/{num_epochs}], Loss: {loss} Eval Loss: {np.mean(test_loss_history[-1]['loss'])}"
         )
 
     return model, {"loss_history": loss_history}
@@ -220,7 +241,7 @@ def _train(
 def evaluate_next_state_predictor(
     args: argparse.Namespace, model: torch.nn.Module, predictor_input: str
 ) -> dict:
-    _, test_dataset = _get_dataset(args, predictor_input, percent_split=0.2)
+    test_dataset, _ = _get_dataset(args, predictor_input, batch_size=1, percent_split=0)
     eval_results = _test_loss(model, test_dataset)
     return {"eval_results": eval_results}
 
@@ -228,7 +249,12 @@ def evaluate_next_state_predictor(
 def train_next_state_predictor(args: argparse.Namespace, predictor_input: str) -> None:
     os.makedirs(args.rl_output_dir, exist_ok=True)
 
-    train_dataset, test_dataset = _get_dataset(args, predictor_input, percent_split=0.2)
+    train_dataset, test_dataset = _get_dataset(
+        args,
+        predictor_input,
+        batch_size=args.batch_size if hasattr(args, "batch_size") else 32,
+        percent_split=0.2,
+    )
 
     model = _get_model(args, predictor_input)
 

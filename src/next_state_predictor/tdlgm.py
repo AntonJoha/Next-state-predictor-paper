@@ -287,7 +287,7 @@ class tDLGM(nn.Module):
 
     def _loss(self, y, mean_pred, var_pred, mean, R, s, t_1, reg) -> torch.Tensor:
 
-        loss = self._gaussian_loss(y, mean_pred, var_pred)
+        loss = self.gaussian_loss(y, mean_pred, var_pred)
 
         matrix_size = mean[0].size(0) * mean[0].size(1)
 
@@ -311,7 +311,7 @@ class tDLGM(nn.Module):
 
         return loss
 
-    def _gaussian_loss(self, y, mean_pred, var_pred) -> torch.Tensor:
+    def gaussian_loss(self, y, mean_pred, var_pred) -> torch.Tensor:
         target = y.reshape_as(mean_pred)
         return self.loss(mean_pred, target, var_pred)
 
@@ -353,7 +353,7 @@ class tDLGM(nn.Module):
             optimizer.step()
 
         with torch.no_grad():
-            gaussian_loss = self._gaussian_loss(y, mean_pred, var_pred)
+            gaussian_loss = self.gaussian_loss(y, mean_pred, var_pred)
 
         return loss.item(), gaussian_loss.item()
 

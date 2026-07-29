@@ -98,6 +98,16 @@ def parse_arguments() -> argparse.Namespace:
         help="Directory to save next state predictor data",
     )
 
+    ### PLOTTING CONFIG
+    ### PLOTTING CONFIG
+    ### PLOTTING CONFIG
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        default=True,
+        help="Whether to plot the results after training and evaluation.",
+    )
+
     return parser.parse_args()
 
 
@@ -121,7 +131,6 @@ def _save_results(results, args):
     )
 
     to_save = {"results": results["results"], "model": model_path, "config": vars(args)}
-
     with open(json_path, "w") as f:
         json.dump(to_save, f, indent=4)
 
@@ -129,7 +138,6 @@ def _save_results(results, args):
 
 
 def main():
-    print("Hello, World!")
 
     args = parse_arguments()
 
@@ -139,6 +147,8 @@ def main():
     if args.rl is not None:
         training_data = train_rl(args)
         testing_data = train_rl(args)
+
+    results = None
 
     if args.next_state_predictor is not None:
         results = {}
@@ -151,6 +161,11 @@ def main():
         )
 
         _save_results(results, args)
+
+    if args.plot is True and results is not None:
+        from next_state_predictor.evaluation import plot_evaluation_results
+
+        plot_evaluation_results(results, args)
 
 
 if __name__ == "__main__":
