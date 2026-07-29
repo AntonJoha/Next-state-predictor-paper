@@ -54,7 +54,9 @@ class _NoisePredictor(nn.Module):
     ) -> None:
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(output_dim + t_emb_dim + hidden_size, hidden_size * 2, device=device),
+            nn.Linear(
+                output_dim + t_emb_dim + hidden_size, hidden_size * 2, device=device
+            ),
             nn.SiLU(),
             nn.Linear(hidden_size * 2, hidden_size, device=device),
             nn.SiLU(),
@@ -249,9 +251,7 @@ class DiffusionPredictor(nn.Module):
         alpha_bar_t = self.alpha_bar[t][:, None]
         return torch.sqrt(alpha_bar_t) * y_0 + torch.sqrt(1.0 - alpha_bar_t) * noise
 
-    def _ddpm_loss(
-        self, y_0: torch.Tensor, context: torch.Tensor
-    ) -> torch.Tensor:
+    def _ddpm_loss(self, y_0: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
         """Compute the DDPM noise-prediction MSE loss."""
         batch_size = y_0.size(0)
         t = torch.randint(0, self.T, (batch_size,), device=self.device)

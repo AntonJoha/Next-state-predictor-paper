@@ -163,7 +163,9 @@ def split_episode_data(
     appear in both sets. The helper requires at least two episodes and always
     keeps at least one episode in both the training and test partitions.
     """
-    test_episode_indices = _select_test_episode_indices(len(episode_lengths), test_split, seed)
+    test_episode_indices = _select_test_episode_indices(
+        len(episode_lengths), test_split, seed
+    )
 
     train_states: list[np.ndarray] = []
     train_next_states: list[np.ndarray] = []
@@ -374,7 +376,9 @@ def train_model(
         batch_losses: list[float] = []
         for start in range(0, N, batch_size):
             idx = perm[start : start + batch_size]
-            loss = model.train_step(x_train[idx], x1_train[idx], y_train[idx], optimizer)
+            loss = model.train_step(
+                x_train[idx], x1_train[idx], y_train[idx], optimizer
+            )
             batch_losses.append(loss)
         epoch_losses.append(float(np.mean(batch_losses)))
 
@@ -492,7 +496,9 @@ def plot_individual(
     # 2. Predicted vs actual scatter (one panel per output dimension)
     ncols = min(output_dim, 4)
     nrows = (output_dim + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows), squeeze=False)
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(4 * ncols, 4 * nrows), squeeze=False
+    )
     for d in range(output_dim):
         row, col = divmod(d, ncols)
         ax = axes[row][col]
@@ -641,13 +647,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env", default="CartPole-v1", help="Gymnasium environment ID")
     parser.add_argument("--episodes", type=int, default=50, help="Collection episodes")
     parser.add_argument("--seq-len", type=int, default=4, help="Input sequence length")
-    parser.add_argument("--epochs", type=int, default=50, help="Training epochs per model")
+    parser.add_argument(
+        "--epochs", type=int, default=50, help="Training epochs per model"
+    )
     parser.add_argument("--batch-size", type=int, default=64, help="Mini-batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-    parser.add_argument("--hidden-size", type=int, default=64, help="Hidden layer width")
-    parser.add_argument("--latent-dim", type=int, default=16, help="Latent space dimension")
-    parser.add_argument("--test-split", type=float, default=0.2, help="Fraction of data for test")
-    parser.add_argument("--output-dir", default="results", help="Directory to save outputs")
+    parser.add_argument(
+        "--hidden-size", type=int, default=64, help="Hidden layer width"
+    )
+    parser.add_argument(
+        "--latent-dim", type=int, default=16, help="Latent space dimension"
+    )
+    parser.add_argument(
+        "--test-split", type=float, default=0.2, help="Fraction of data for test"
+    )
+    parser.add_argument(
+        "--output-dir", default="results", help="Directory to save outputs"
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--models",
@@ -677,7 +693,9 @@ def main() -> None:
 
     # ── collect transitions ────────────────────────────────────────────────────
     print(f"Collecting transitions ({args.episodes} episodes) …")
-    states, next_states, episode_lengths = collect_transitions(args.env, args.episodes, args.seed)
+    states, next_states, episode_lengths = collect_transitions(
+        args.env, args.episodes, args.seed
+    )
     print(f"  {len(states)} transitions collected; obs_dim={states.shape[1]}")
 
     # ── split by episode to avoid overlapping-window leakage ──────────────────
@@ -725,7 +743,10 @@ def main() -> None:
         print(f"  training   : {args.epochs} epochs …")
         t0 = time.time()
         loss_history = train_model(
-            model, x_train, x1_train, y_train,
+            model,
+            x_train,
+            x1_train,
+            y_train,
             n_epochs=args.epochs,
             lr=args.lr,
             batch_size=args.batch_size,

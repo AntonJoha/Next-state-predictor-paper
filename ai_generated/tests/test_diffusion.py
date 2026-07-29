@@ -40,7 +40,9 @@ def data():
 
 
 def test_diffusion_odd_t_emb_dim_raises():
-    with pytest.raises(ValueError, match="t_emb_dim must be even for sinusoidal embedding"):
+    with pytest.raises(
+        ValueError, match="t_emb_dim must be even for sinusoidal embedding"
+    ):
         DiffusionPredictor(t_emb_dim=7)
 
 

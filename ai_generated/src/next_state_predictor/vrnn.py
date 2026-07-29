@@ -196,9 +196,7 @@ class VRNN(nn.Module):
     ) -> torch.Tensor:
         """Gaussian negative log-likelihood (mean-reduced over batch and dim)."""
         nll = 0.5 * (
-            log_var
-            + (target - mean).pow(2) / log_var.exp()
-            + math.log(2 * math.pi)
+            log_var + (target - mean).pow(2) / log_var.exp() + math.log(2 * math.pi)
         )
         return nll.sum(-1).mean()
 

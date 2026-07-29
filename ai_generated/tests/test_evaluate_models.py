@@ -17,7 +17,14 @@ def test_split_episode_data_keeps_episodes_intact():
     states = np.array([[0], [1], [10], [11], [20], [21], [30], [31]], dtype=np.float32)
     next_states = states + 0.5
 
-    train_states, train_next_states, train_lengths, test_states, test_next_states, test_lengths = split_episode_data(
+    (
+        train_states,
+        train_next_states,
+        train_lengths,
+        test_states,
+        test_next_states,
+        test_lengths,
+    ) = split_episode_data(
         states,
         next_states,
         episode_lengths,

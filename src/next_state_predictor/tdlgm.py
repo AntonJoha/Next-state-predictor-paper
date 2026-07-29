@@ -143,7 +143,11 @@ class Generator(nn.Module):
         v = self.initial_transform(self.xi[0])
         for i, layer in enumerate(self.gen_layers, start=1):
             v = layer(v, self.xi[i])
-        return self.mean_layer(v[:, -1, :]), self.variance_layer(v[:, -1, :]), self.get_internal_state()
+        return (
+            self.mean_layer(v[:, -1, :]),
+            self.variance_layer(v[:, -1, :]),
+            self.get_internal_state(),
+        )
 
     def get_internal_state(self):
         return [layer.get_internal_state() for layer in self.gen_layers]
@@ -263,18 +267,11 @@ class tDLGM(nn.Module):
     ):
         super().__init__()
 
-        self.model_t = TimeRecognition(input_dim,
-                                       hidden_size,
-                                       seq_len,
-                                       layers,
-                                       device)
+        self.model_t = TimeRecognition(input_dim, hidden_size, seq_len, layers, device)
 
-        self.model_g = Generator(hidden_size,
-                                 latent_dim,
-                                 output_dim,
-                                 layers,
-                                 seq_len,
-                                 device)
+        self.model_g = Generator(
+            hidden_size, latent_dim, output_dim, layers, seq_len, device
+        )
 
         self.model_r = Recognition(input_dim, latent_dim, layers, device)
 
@@ -289,9 +286,8 @@ class tDLGM(nn.Module):
         )
 
     def _loss(self, y, mean_pred, var_pred, mean, R, s, t_1, reg) -> torch.Tensor:
-        
-        loss = self._gaussian_loss(y, mean_pred, var_pred)
 
+        loss = self._gaussian_loss(y, mean_pred, var_pred)
 
         matrix_size = mean[0].size(0) * mean[0].size(1)
 
@@ -315,24 +311,22 @@ class tDLGM(nn.Module):
 
         return loss
 
-
     def _gaussian_loss(self, y, mean_pred, var_pred) -> torch.Tensor:
         target = y.reshape_as(mean_pred)
         return self.loss(mean_pred, target, var_pred)
 
-
-
-# TODO THIS NEEDS TO BE ADDRESSED, WE DO NOT KNOW THE FUTURE ACTION SO HOW CAN WE ENCODE IT?
-# The solution so far is to pad an "illegal" action to the end of the sequence, but this is not ideal and should be fixed in the future.
+    # TODO THIS NEEDS TO BE ADDRESSED, WE DO NOT KNOW THE FUTURE ACTION SO HOW CAN WE ENCODE IT?
+    # The solution so far is to pad an "illegal" action to the end of the sequence, but this is not ideal and should be fixed in the future.
     def _make_x1(self, x, y):
-        
+
         x_size = x.shape[-1]
         y_size = y.shape[-1]
-        
-        y_padded = torch.cat((y, torch.zeros(y.size(0), x_size - y_size, device=y.device) -1 ), dim=-1).unsqueeze(1)
+
+        y_padded = torch.cat(
+            (y, torch.zeros(y.size(0), x_size - y_size, device=y.device) - 1), dim=-1
+        ).unsqueeze(1)
 
         return torch.cat((x, y_padded), dim=1)[:, 1:, :]
-
 
     def get_loss(self, x, y) -> tuple[float, float]:
         return self.train_step(x, y, optimizer=None)
@@ -360,7 +354,7 @@ class tDLGM(nn.Module):
 
         with torch.no_grad():
             gaussian_loss = self._gaussian_loss(y, mean_pred, var_pred)
-        
+
         return loss.item(), gaussian_loss.item()
 
     def forward(self, x) -> torch.Tensor:
@@ -372,8 +366,6 @@ class tDLGM(nn.Module):
         return mean_pred, var_pred
 
 
-
 # ── Self-test ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("SELF TEST IS OUTDATED")
-

@@ -28,7 +28,7 @@ class ReplayBuffer:
             np.array(actions),
             np.array(rewards),
             np.array(next_states),
-            np.array(done)
+            np.array(done),
         )
 
 
@@ -89,8 +89,7 @@ class DQNAgent:
         self.q_network = QNetwork(self.config).to(device)
         self.target_network = QNetwork(self.config).to(device).eval()
 
-        self.optimizer = config["optimizer"](
-            self.q_network.parameters())
+        self.optimizer = config["optimizer"](self.q_network.parameters())
         self.loss_function = loss()
 
     def evaluate_mode(self):
@@ -128,7 +127,7 @@ class DQNAgent:
 
     def replay(self, replay_buffer, batch_size=128, target_network=True):
 
-        if replay_buffer.buffer_size() < batch_size*10:
+        if replay_buffer.buffer_size() < batch_size * 10:
             return
 
         # Sample a batch of experiences from the replay buffer
@@ -158,7 +157,9 @@ class DQNAgent:
                 )
 
         # Calculate target Q-values
-        target_q_values = rewards_tensor + (1-done_tensor)*self.config["discount"] * next_q_values
+        target_q_values = (
+            rewards_tensor + (1 - done_tensor) * self.config["discount"] * next_q_values
+        )
 
         self.optimizer.zero_grad()
         # Q-values for the current state-action pairs
