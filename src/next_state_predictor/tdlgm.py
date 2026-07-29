@@ -135,6 +135,9 @@ class Generator(nn.Module):
             nn.Linear(hidden_size, output_dim, device=device),
             nn.Softplus(),
         )
+        self.reward_layer = nn.Sequential(
+            nn.Linear(hidden_size, 1, device=device),
+        )
 
     def forward(self, batch_size=1):
         if self.xi is None:
@@ -146,6 +149,7 @@ class Generator(nn.Module):
         return (
             self.mean_layer(v[:, -1, :]),
             self.variance_layer(v[:, -1, :]),
+            self.reward_layer(v[:, -1, :]),
             self.get_internal_state(),
         )
 
@@ -285,7 +289,9 @@ class tDLGM(nn.Module):
             self.model_r.parameters(),
         )
 
-    def _loss(self, y, mean_pred, var_pred, mean, R, s, t_1, reg) -> torch.Tensor:
+    def _loss(
+        self, y, mean_pred, var_pred, reward_pred, mean, R, s, t_1, reg
+    ) -> torch.Tensor:
 
         loss = self.gaussian_loss(y, mean_pred, var_pred)
 
@@ -328,10 +334,10 @@ class tDLGM(nn.Module):
 
         return torch.cat((x, y_padded), dim=1)[:, 1:, :]
 
-    def get_loss(self, x, y) -> tuple[float, float]:
-        return self.train_step(x, y, optimizer=None)
+    def get_loss(self, x, reward, y) -> tuple[float, float]:
+        return self.train_step(x, reward, y, optimizer=None)
 
-    def train_step(self, x, y, optimizer) -> tuple[float, float]:
+    def train_step(self, x, reward, y, optimizer) -> tuple[float, float]:
         if optimizer is not None:
             optimizer.zero_grad()
 
@@ -344,9 +350,14 @@ class tDLGM(nn.Module):
         mean, R, z = self.model_r(x_1)
         self.model_g.set_xi(z)
 
-        mean_pred, var_pred, h = self.model_g(x.size(0))
+        mean_pred, var_pred, reward_pred, h = self.model_g(x.size(0))
 
-        loss = self._loss(y, mean_pred, var_pred, mean, R, h, t_1, reg=0.01)
+        loss = self._loss(
+            y, mean_pred, var_pred, reward_pred, mean, R, h, t_1, reg=0.01
+        )
+
+        reward_loss = self.mse(reward_pred, reward.unsqueeze(-1))
+        loss += reward_loss
 
         if optimizer is not None:
             loss.backward()
@@ -355,15 +366,15 @@ class tDLGM(nn.Module):
         with torch.no_grad():
             gaussian_loss = self.gaussian_loss(y, mean_pred, var_pred)
 
-        return loss.item(), gaussian_loss.item()
+        return loss.item(), gaussian_loss.item(), reward_loss.item()
 
     def forward(self, x) -> torch.Tensor:
         self.model_g.make_internal_state(x.size(0))
         t = self.model_t(x)
         self.model_g.set_internal_state(t)
         self.model_g.make_xi(x.size(0))
-        mean_pred, var_pred, _ = self.model_g(x.size(0))
-        return mean_pred, var_pred
+        mean_pred, var_pred, reward_pred, _ = self.model_g(x.size(0))
+        return mean_pred, var_pred, reward_pred
 
 
 # ── Self-test ─────────────────────────────────────────────────────────────────

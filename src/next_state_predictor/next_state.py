@@ -6,6 +6,60 @@ import torch
 from torch.utils.data import DataLoader, Dataset, random_split
 
 
+class BasicMLP(torch.nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+        self.model = torch.nn.Sequential(
+            torch.nn.Linear(input_dim, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, output_dim),
+        )
+        self.mean = torch.nn.Sequential(
+            torch.nn.Linear(output_dim, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, output_dim),
+        )
+
+        self.var = torch.nn.Sequential(
+            torch.nn.Linear(output_dim, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, output_dim),
+            torch.nn.Softplus(),  # Ensure variance is positive
+        )
+        self.reward = torch.nn.Sequential(
+            torch.nn.Linear(output_dim, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, 1),
+        )
+
+        self.loss = torch.nn.GaussianNLLLoss()
+        self.mse = torch.nn.MSELoss()
+
+    def gaussian_loss(self, mean, target, var):
+        return self.loss(mean, target, var)
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)  # Flatten the trajectory for MLP input
+        x = self.model(x)
+        return self.mean(x), self.var(x), self.reward(x)
+
+    def train_step(self, trajectory, reward, y, optimizer):
+        optimizer.zero_grad()
+        mean, var, reward_pred = self.forward(trajectory)
+        loss = self.loss(mean, y, var) + self.mse(reward_pred, reward.unsqueeze(-1))
+        loss.backward()
+        optimizer.step()
+        return loss.item(), self.mse(reward_pred, reward.unsqueeze(-1)).item()
+
+
 def _prepare_trajectories(lookback: int, trajectories) -> np.ndarray:
 
     shape = trajectories.shape
@@ -79,48 +133,6 @@ def _get_basic_mlp_model(args: argparse.Namespace, dataset: NextStateDataset):
     output_dim = dataset["next_states"].shape[
         1
     ]  # Assuming next_states is of shape (N, state_dim)
-
-    class BasicMLP(torch.nn.Module):
-        def __init__(self, input_dim, output_dim):
-            super().__init__()
-            self.model = torch.nn.Sequential(
-                torch.nn.Linear(input_dim, 128),
-                torch.nn.ReLU(),
-                torch.nn.Linear(128, 64),
-                torch.nn.ReLU(),
-                torch.nn.Linear(64, output_dim),
-            )
-            self.mean = torch.nn.Sequential(
-                torch.nn.Linear(output_dim, 128),
-                torch.nn.ReLU(),
-                torch.nn.Linear(128, 64),
-                torch.nn.ReLU(),
-                torch.nn.Linear(64, output_dim),
-            )
-
-            self.var = torch.nn.Sequential(
-                torch.nn.Linear(output_dim, 128),
-                torch.nn.ReLU(),
-                torch.nn.Linear(128, 64),
-                torch.nn.ReLU(),
-                torch.nn.Linear(64, output_dim),
-            )
-            self.loss = torch.nn.GaussianNLLLoss()
-
-        def forward(self, x):
-            x = x.view(x.size(0), -1)  # Flatten the trajectory for MLP input
-            return self.model(x)
-
-        def train_step(self, trajectory, y, optimizer):
-            optimizer.zero_grad()
-            output = self.forward(trajectory)
-            mean = self.mean(output)
-            var = torch.exp(self.var(output))  # Ensure variance is positive
-            loss = self.loss(mean, y, var)
-            loss.backward()
-            optimizer.step()
-            return loss.item()
-
     model = BasicMLP(input_dim, output_dim)
     return model
 
@@ -185,10 +197,13 @@ def _test_loss(model: torch.nn.Module, dataset: DataLoader) -> float:
     mean_list = []
     var_list = []
     next_state_list = []
+    reward_list = []
     with torch.no_grad():
-        for _, (trajectory, _, _, _, next_state) in enumerate(dataset):
-            mean, var = model(trajectory)
+        for _, (trajectory, _action, reward, _state, next_state) in enumerate(dataset):
+            mean, var, reward_pred = model(trajectory)
             loss = model.gaussian_loss(mean, next_state, var).item()
+
+            reward_list.append(model.mse(reward_pred, reward.unsqueeze(-1)).item())
             eval_list.append(loss)
             mean_list.append(mean.tolist())
             var_list.append(var.tolist())
@@ -224,8 +239,10 @@ def _train(
     model.train()
     for epoch in range(num_epochs):
         loss_epoch = []
-        for _, (trajectory, _, _, _, next_state) in enumerate(train_dataset):
-            loss = model.train_step(trajectory, next_state, optimizer)
+        for _, (trajectory, _action, reward, _state, next_state) in enumerate(
+            train_dataset
+        ):
+            loss = model.train_step(trajectory, reward, next_state, optimizer)
             loss_epoch.append(loss)
 
         test_loss_history.append(_test_loss(model, test_dataset))
