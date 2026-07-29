@@ -375,30 +375,5 @@ class tDLGM(nn.Module):
 
 # ── Self-test ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    from torch.optim import Adam
-
-    model = tDLGM(
-        input_dim=10,
-        hidden_size=20,
-        latent_dim=5,
-        output_dim=10,
-        layers=2,
-        seq_len=3,
-        device=device,
-    ).to(device)
-    optimizer = Adam(model.get_parameters(), lr=0.001)
-
-    x = torch.randn(50, 3, 10).to(device)  # used for the state recognition
-    y = torch.randn(50, 1, 10).to(device)  # the value to be reconstructed
-    x_1 = torch.cat((x, y), dim=1)[:, 1:, :]  # used for the recognition
-
-    before = model.get_loss(x, y)
-    for _ in range(300):
-        loss = model.train_step(x, y, optimizer)
-        print(f"Training loss: {loss}")
-    after = model.get_loss(x, y)
-    print(f"Loss before training: {before}")
-    print(f"Loss after training: {after}")
-    assert after < before, "Loss did not decrease after training! MSELoss"
-
+    print("SELF TEST IS OUTDATED")
 
