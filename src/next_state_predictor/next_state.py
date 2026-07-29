@@ -142,7 +142,7 @@ def _get_dataset(args: argparse.Namespace, predictor_input: str, percent_split: 
         lookback=args.lookback
     )
 
-    train_dataset, val_dataset = random_split(dataset, [int((1-percent_split) * len(dataset)), len(dataset) - int((1-percent_split) len(dataset))])
+    train_dataset, val_dataset = random_split(dataset, [int((1-percent_split) * len(dataset)), len(dataset) - int((1-percent_split) * len(dataset))])
 
     return DataLoader(train_dataset, shuffle=True,
                       batch_size=args.batch_size if hasattr(args, 'batch_size') else 32), DataLoader(val_dataset, shuffle=True, batch_size=args.batch_size if hasattr(args, 'batch_size') else 32)
@@ -152,7 +152,6 @@ def _get_dataset(args: argparse.Namespace, predictor_input: str, percent_split: 
 
 def _test_loss(model: torch.nn.Module, dataset: DataLoader) -> float:
     model.eval()
-    total_loss = 0.0
     eval_list = []
     with torch.no_grad():
         for _, (trajectory, _, _, _, next_state) in enumerate(dataset):
