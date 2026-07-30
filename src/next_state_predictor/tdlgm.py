@@ -317,9 +317,9 @@ class tDLGM(nn.Module):
 
         return loss
 
-    def gaussian_loss(self, y, mean_pred, var_pred) -> torch.Tensor:
-        target = y.reshape_as(mean_pred)
-        return self.loss(mean_pred, target, var_pred)
+def gaussian_loss(self, mean_pred, y, var_pred) -> torch.Tensor:
+    target = y.reshape_as(mean_pred)
+    return self.loss(mean_pred, target, var_pred)
 
     # TODO THIS NEEDS TO BE ADDRESSED, WE DO NOT KNOW THE FUTURE ACTION SO HOW CAN WE ENCODE IT?
     # The solution so far is to pad an "illegal" action to the end of the sequence, but this is not ideal and should be fixed in the future.
