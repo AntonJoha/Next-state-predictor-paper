@@ -38,6 +38,7 @@ class Agent(ABC):
 
     def reset(self) -> None:
         """Called at the start of every episode. Override if needed."""
+        return None
 
 
 class RandomAgent(Agent):

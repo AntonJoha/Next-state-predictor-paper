@@ -327,7 +327,9 @@ class tDLGM(nn.Module):
         super().__init__()
 
         self.model_t = TimeRecognition(input_dim, hidden_size, seq_len, layers, device)
-        self.model_g = Generator(hidden_size, latent_dim, output_dim, layers, seq_len, device)
+        self.model_g = Generator(
+            hidden_size, latent_dim, output_dim, layers, seq_len, device
+        )
         self.model_r = Recognition(input_dim, latent_dim, layers, device)
 
         self.mse = nn.MSELoss()
@@ -492,4 +494,6 @@ class tDLGMCrossEntropy(tDLGM):
             target = y.reshape(-1)
         else:
             target = y.argmax(dim=-1).reshape(-1)
-        return self.cross_entropy(y_hat, target) + self._kl_reg_loss(mean, R, s, t_1, reg)
+        return self.cross_entropy(y_hat, target) + self._kl_reg_loss(
+            mean, R, s, t_1, reg
+        )

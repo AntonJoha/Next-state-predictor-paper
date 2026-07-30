@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import torch
 import pytest
-
+import torch
 from next_state_predictor.diffusion import DiffusionPredictor
 
 DEVICE = torch.device("cpu")
@@ -41,7 +40,9 @@ def data():
 
 
 def test_diffusion_odd_t_emb_dim_raises():
-    with pytest.raises(ValueError, match="t_emb_dim must be even for sinusoidal embedding"):
+    with pytest.raises(
+        ValueError, match="t_emb_dim must be even for sinusoidal embedding"
+    ):
         DiffusionPredictor(t_emb_dim=7)
 
 

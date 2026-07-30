@@ -135,6 +135,9 @@ class Generator(nn.Module):
             nn.Linear(hidden_size, output_dim, device=device),
             nn.Softplus(),
         )
+        self.reward_layer = nn.Sequential(
+            nn.Linear(hidden_size, 1, device=device),
+        )
 
     def forward(self, batch_size=1):
         if self.xi is None:
@@ -143,7 +146,12 @@ class Generator(nn.Module):
         v = self.initial_transform(self.xi[0])
         for i, layer in enumerate(self.gen_layers, start=1):
             v = layer(v, self.xi[i])
-        return self.mean_layer(v[:, -1, :]), self.variance_layer(v[:, -1, :]), self.get_internal_state()
+        return (
+            self.mean_layer(v[:, -1, :]),
+            self.variance_layer(v[:, -1, :]),
+            self.reward_layer(v[:, -1, :]),
+            self.get_internal_state(),
+        )
 
     def get_internal_state(self):
         return [layer.get_internal_state() for layer in self.gen_layers]
@@ -263,18 +271,11 @@ class tDLGM(nn.Module):
     ):
         super().__init__()
 
-        self.model_t = TimeRecognition(input_dim,
-                                       hidden_size,
-                                       seq_len,
-                                       layers,
-                                       device)
+        self.model_t = TimeRecognition(input_dim, hidden_size, seq_len, layers, device)
 
-        self.model_g = Generator(hidden_size,
-                                 latent_dim,
-                                 output_dim,
-                                 layers,
-                                 seq_len,
-                                 device)
+        self.model_g = Generator(
+            hidden_size, latent_dim, output_dim, layers, seq_len, device
+        )
 
         self.model_r = Recognition(input_dim, latent_dim, layers, device)
 
@@ -288,10 +289,11 @@ class tDLGM(nn.Module):
             self.model_r.parameters(),
         )
 
-    def _loss(self, y, mean_pred, var_pred, mean, R, s, t_1, reg) -> torch.Tensor:
-        
-        loss = self._gaussian_loss(y, mean_pred, var_pred)
+    def _loss(
+        self, y, mean_pred, var_pred, reward_pred, mean, R, s, t_1, reg
+    ) -> torch.Tensor:
 
+        loss = self.gaussian_loss(y, mean_pred, var_pred)
 
         matrix_size = mean[0].size(0) * mean[0].size(1)
 
@@ -315,29 +317,27 @@ class tDLGM(nn.Module):
 
         return loss
 
-
-    def _gaussian_loss(self, y, mean_pred, var_pred) -> torch.Tensor:
-        target = y.reshape_as(mean_pred)
+    def gaussian_loss(self, mean_pred, y, var_pred) -> torch.Tensor:
+        target = y.reshape_as(y)
         return self.loss(mean_pred, target, var_pred)
 
-
-
-# TODO THIS NEEDS TO BE ADDRESSED, WE DO NOT KNOW THE FUTURE ACTION SO HOW CAN WE ENCODE IT?
-# The solution so far is to pad an "illegal" action to the end of the sequence, but this is not ideal and should be fixed in the future.
+    # TODO THIS NEEDS TO BE ADDRESSED, WE DO NOT KNOW THE FUTURE ACTION SO HOW CAN WE ENCODE IT?
+    # The solution so far is to pad an "illegal" action to the end of the sequence, but this is not ideal and should be fixed in the future.
     def _make_x1(self, x, y):
-        
+
         x_size = x.shape[-1]
         y_size = y.shape[-1]
-        
-        y_padded = torch.cat((y, torch.zeros(y.size(0), x_size - y_size, device=y.device) -1 ), dim=-1).unsqueeze(1)
+
+        y_padded = torch.cat(
+            (y, torch.zeros(y.size(0), x_size - y_size, device=y.device) - 1), dim=-1
+        ).unsqueeze(1)
 
         return torch.cat((x, y_padded), dim=1)[:, 1:, :]
 
+    def get_loss(self, x, reward, y) -> tuple[float, float]:
+        return self.train_step(x, reward, y, optimizer=None)
 
-    def get_loss(self, x, y) -> tuple[float, float]:
-        return self.train_step(x, y, optimizer=None)
-
-    def train_step(self, x, y, optimizer) -> tuple[float, float]:
+    def train_step(self, x, reward, y, optimizer) -> tuple[float, float]:
         if optimizer is not None:
             optimizer.zero_grad()
 
@@ -350,30 +350,33 @@ class tDLGM(nn.Module):
         mean, R, z = self.model_r(x_1)
         self.model_g.set_xi(z)
 
-        mean_pred, var_pred, h = self.model_g(x.size(0))
+        mean_pred, var_pred, reward_pred, h = self.model_g(x.size(0))
 
-        loss = self._loss(y, mean_pred, var_pred, mean, R, h, t_1, reg=0.01)
+        loss = self._loss(
+            y, mean_pred, var_pred, reward_pred, mean, R, h, t_1, reg=0.01
+        )
+
+        reward_loss = self.mse(reward_pred, reward.unsqueeze(-1))
+        loss += reward_loss
 
         if optimizer is not None:
             loss.backward()
             optimizer.step()
 
         with torch.no_grad():
-            gaussian_loss = self._gaussian_loss(y, mean_pred, var_pred)
-        
-        return loss.item(), gaussian_loss.item()
+            gaussian_loss = self.gaussian_loss(mean_pred, y, var_pred)
+
+        return loss.item(), gaussian_loss.item(), reward_loss.item()
 
     def forward(self, x) -> torch.Tensor:
         self.model_g.make_internal_state(x.size(0))
         t = self.model_t(x)
         self.model_g.set_internal_state(t)
         self.model_g.make_xi(x.size(0))
-        mean_pred, var_pred, _ = self.model_g(x.size(0))
-        return mean_pred, var_pred
-
+        mean_pred, var_pred, reward_pred, _ = self.model_g(x.size(0))
+        return mean_pred, var_pred, reward_pred
 
 
 # ── Self-test ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("SELF TEST IS OUTDATED")
-

@@ -5,8 +5,9 @@ from __future__ import annotations
 import itertools
 import random
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import gymnasium as gym
 
@@ -97,7 +98,8 @@ def tune_dqn(
 
     keys = list(param_grid.keys())
     all_combinations: list[dict[str, Any]] = [
-        dict(zip(keys, combo)) for combo in itertools.product(*param_grid.values())
+        dict(zip(keys, combo, strict=False))
+        for combo in itertools.product(*param_grid.values())
     ]
 
     if n_trials is None:
@@ -113,7 +115,9 @@ def tune_dqn(
                 "will produce duplicate configurations.",
                 stacklevel=2,
             )
-            combinations_to_try = [rng.choice(all_combinations) for _ in range(n_trials)]
+            combinations_to_try = [
+                rng.choice(all_combinations) for _ in range(n_trials)
+            ]
 
     trials: list[TrialResult] = []
     best_score = float("-inf")
@@ -123,9 +127,7 @@ def tune_dqn(
         # Derive a per-trial seed that is independent across different tuning
         # runs: hashing (seed, index) avoids the collision that arises when
         # trial k of run with seed s+1 happens to equal trial k+1 of seed s.
-        trial_seed = (
-            None if seed is None else abs(hash((seed, trial_index))) % (2**31)
-        )
+        trial_seed = None if seed is None else abs(hash((seed, trial_index))) % (2**31)
         env = make_env()
         try:
             agent = DQNAgent(env, seed=trial_seed, **params)

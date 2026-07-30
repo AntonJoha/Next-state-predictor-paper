@@ -2,7 +2,6 @@
 
 import gymnasium as gym
 import pytest
-
 from next_state_predictor.agent import RandomAgent
 
 

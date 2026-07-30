@@ -12,6 +12,7 @@ let
     torch
     gymnasium
     pip
+    ruff
 
 
   ]);

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import re
 import random
+import re
 import sqlite3
 from collections import deque
 from typing import NamedTuple
@@ -110,8 +110,7 @@ class ReplayBuffer:
                 # Existing rows in migrated tables keep this default until
                 # they are rewritten by a future save.
                 conn.execute(
-                    f"ALTER TABLE {table} "
-                    "ADD COLUMN state_trajectory TEXT DEFAULT '[]'"
+                    f"ALTER TABLE {table} ADD COLUMN state_trajectory TEXT DEFAULT '[]'"
                 )
 
             state_window: deque[np.ndarray] = deque(maxlen=trajectory_length)
