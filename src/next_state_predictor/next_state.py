@@ -191,26 +191,23 @@ def _get_dataset(
     )
 
 
-def _test_loss(model: torch.nn.Module, dataset: DataLoader) -> float:
+def _test_loss(model: torch.nn.Module, dataset: DataLoader) -> dict[str, list]:
+    was_training = model.training
     model.eval()
-    eval_list = []
-    mean_list = []
-    var_list = []
-    next_state_list = []
-    reward_list = []
+    eval_list, mean_list, var_list, next_state_list, reward_mse_list = [], [], [], [], []
     with torch.no_grad():
         for _, (trajectory, _action, reward, _state, next_state) in enumerate(dataset):
             mean, var, reward_pred = model(trajectory)
-            loss = model.gaussian_loss(mean, next_state, var).item()
-
-            reward_list.append(model.mse(reward_pred, reward.unsqueeze(-1)).item())
-            eval_list.append(loss)
+            eval_list.append(model.gaussian_loss(mean, next_state, var).item())
+            reward_mse_list.append(model.mse(reward_pred, reward.unsqueeze(-1)).item())
             mean_list.append(mean.tolist())
             var_list.append(var.tolist())
             next_state_list.append(next_state.tolist())
-
+    if was_training:
+        model.train()
     return {
         "loss": eval_list,
+        "reward_mse": reward_mse_list,
         "predicted_mean": mean_list,
         "actual": next_state_list,
         "predicted_var": var_list,
