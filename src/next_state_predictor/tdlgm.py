@@ -317,9 +317,9 @@ class tDLGM(nn.Module):
 
         return loss
 
-def gaussian_loss(self, mean_pred, y, var_pred) -> torch.Tensor:
-    target = y.reshape_as(mean_pred)
-    return self.loss(mean_pred, target, var_pred)
+    def gaussian_loss(self, mean_pred, y, var_pred) -> torch.Tensor:
+        target = y.reshape_as(y)
+        return self.loss(mean_pred, target, var_pred)
 
     # TODO THIS NEEDS TO BE ADDRESSED, WE DO NOT KNOW THE FUTURE ACTION SO HOW CAN WE ENCODE IT?
     # The solution so far is to pad an "illegal" action to the end of the sequence, but this is not ideal and should be fixed in the future.
@@ -364,7 +364,7 @@ def gaussian_loss(self, mean_pred, y, var_pred) -> torch.Tensor:
             optimizer.step()
 
         with torch.no_grad():
-            gaussian_loss = self.gaussian_loss(y, mean_pred, var_pred)
+            gaussian_loss = self.gaussian_loss(mean_pred, y, var_pred)
 
         return loss.item(), gaussian_loss.item(), reward_loss.item()
 

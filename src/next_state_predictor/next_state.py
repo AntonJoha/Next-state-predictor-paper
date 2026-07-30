@@ -194,7 +194,13 @@ def _get_dataset(
 def _test_loss(model: torch.nn.Module, dataset: DataLoader) -> dict[str, list]:
     was_training = model.training
     model.eval()
-    eval_list, mean_list, var_list, next_state_list, reward_mse_list = [], [], [], [], []
+    eval_list, mean_list, var_list, next_state_list, reward_mse_list = (
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
     with torch.no_grad():
         for _, (trajectory, _action, reward, _state, next_state) in enumerate(dataset):
             mean, var, reward_pred = model(trajectory)
